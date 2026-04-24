@@ -77,11 +77,13 @@ def process_video_task(self, source: str, options: dict, mode: str = "monolithic
             logger.error(f"Failed to emit progress: {e}")
 
     try:
+        filtered_options = _normalize_process_options(options)
         # Run workflow
         result = process_video(
             source_input=source,
             log_cb=log_callback,
-            **options,
+            progress_cb=progress_callback,
+            **filtered_options,
         )
 
         # Emit completion
@@ -180,6 +182,30 @@ def get_task_status(task_id: str) -> dict:
 _sync_tasks = {}
 
 
+def _normalize_process_options(options: dict) -> dict:
+    """Map frontend request fields to workflow args and drop unsupported keys."""
+    normalized = dict(options or {})
+
+    if 'burn_subtitle' in normalized:
+        normalized['burn_sub'] = normalized.pop('burn_subtitle')
+    if 'cover_strength' in normalized:
+        normalized['blur_power'] = normalized.pop('cover_strength')
+    if 'enable_dubbing' in normalized:
+        normalized['enable_dub'] = normalized.pop('enable_dubbing')
+
+    valid_keys = {
+        'cover_mode', 'burn_sub', 'subtitle_offset_sec',
+        'subtitle_timing_scale', 'video_speed', 'render_video_speed', 'output_video_speed', 'srt_max_chars_per_line',
+        'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
+        'blur_padding_px', 'cover_offset_px', 'blur_power',
+        'locked_subtitle_top_y', 'locked_subtitle_bottom_y',
+        'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
+        'dub_preset_voice', 'dub_ref_audio', 'dub_ref_text',
+        'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode'
+    }
+    return {k: v for k, v in normalized.items() if k in valid_keys}
+
+
 def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
     """Run process_video synchronously (fallback when Celery unavailable)."""
     from src.modules.workflow import process_video
@@ -197,32 +223,23 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
         except Exception as e:
             logger.error(f"Failed to emit log: {e}")
 
-    # Map frontend parameter names to backend parameter names
-    if 'burn_subtitle' in options:
-        options['burn_sub'] = options.pop('burn_subtitle')
-    if 'cover_strength' in options:
-        options['blur_power'] = options.pop('cover_strength')
-    if 'enable_dubbing' in options:
-        options['enable_dub'] = options.pop('enable_dubbing')
+    def progress_callback(step: int, progress: float, message: str):
+        """Progress callback."""
+        logger.info(f"[{task_id}] Step {step}: {progress}% - {message}")
+        _sync_tasks[task_id] = {"status": "running", "progress": progress, "message": message, "step": step}
+        try:
+            asyncio.run(emit_progress(task_id, step, progress, message))
+        except Exception as e:
+            logger.error(f"Failed to emit progress: {e}")
 
-    # Filter options to only valid process_video parameters
-    valid_keys = {
-        'cover_mode', 'burn_sub', 'subtitle_offset_sec',
-        'subtitle_timing_scale', 'video_speed', 'render_video_speed', 'output_video_speed', 'srt_max_chars_per_line',
-        'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
-        'blur_padding_px', 'cover_offset_px', 'blur_power',
-        'locked_subtitle_top_y', 'locked_subtitle_bottom_y',
-        'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
-        'dub_preset_voice', 'dub_ref_audio', 'dub_ref_text',
-        'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode'
-    }
-    filtered_options = {k: v for k, v in options.items() if k in valid_keys}
+    filtered_options = _normalize_process_options(options)
 
     try:
         # Run workflow
         result = process_video(
             source_input=source,
             log_cb=log_callback,
+            progress_cb=progress_callback,
             **filtered_options,
         )
 
@@ -277,7 +294,7 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
         else:
             result_dict = result if isinstance(result, dict) else {}
 
-        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result_dict}
+        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result_dict, "step": 7}
 
         # Emit completion
         try:

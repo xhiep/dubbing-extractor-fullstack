@@ -551,6 +551,7 @@ def process_video(
     cover_mode: str = "blur",
     burn_sub: bool = False,
     log_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Optional[Callable[[int, float, str], None]] = None,
     subtitle_offset_sec: float = 0.0,
     subtitle_timing_scale: float = 1.0,
     render_video_speed: float = 1.0,
@@ -588,6 +589,9 @@ def process_video(
         Output directory path if successful, None otherwise
     """
     _log = _make_log(log_cb)
+    def _progress(current_step: int, progress: float, message: str):
+        if progress_cb:
+            progress_cb(current_step, progress, message)
     effective_render_speed, effective_output_speed = _resolve_speed_options(
         {
             "render_video_speed": render_video_speed,
@@ -607,17 +611,22 @@ def process_video(
     try:
         _log_runtime_memory(log_cb, "start")
         # Bước 1
+        _progress(1, 10, "Preparing source...")
         result1 = step1_prepare(source_input, log_cb)
         raw_video = result1["raw_video"]
         raw_audio = result1["raw_audio"]
         title = result1["title"]
         out_dir = result1["out_dir"]
         temp_dir = result1["temp_dir"]
+        _progress(1, 100, "Step 1 completed")
 
         # Bước 2
+        _progress(2, 15, "Transcribing audio...")
         segs = step2_transcribe(raw_audio, log_cb)
+        _progress(2, 100, "Step 2 completed")
 
         # Bước 3
+        _progress(3, 20, "Translating subtitle...")
         segs_vi = step3_translate(
             segs,
             subtitle_timing_scale,
@@ -625,8 +634,10 @@ def process_video(
             effective_render_speed,
             log_cb,
         )
+        _progress(3, 100, "Step 3 completed")
 
         # Bước 4
+        _progress(4, 20, "Covering original subtitle...")
         result4 = step4_cover(
             raw_video, segs_vi, out_dir, cover_mode,
             blur_padding_px=blur_padding_px,
@@ -639,8 +650,10 @@ def process_video(
         )
         final_video = result4["final_video"]
         cover_meta = result4["cover_meta"]
+        _progress(4, 100, "Step 4 completed")
 
         # Bước 5
+        _progress(5, 25, "Exporting files...")
         srt_path = step5_export(
             segs_vi, out_dir, title, cover_meta, raw_video,
             srt_max_chars_per_line=srt_max_chars_per_line,
@@ -657,10 +670,12 @@ def process_video(
             cover_mode=cover_mode,
             log_cb=log_cb,
         )
+        _progress(5, 100, "Step 5 completed")
 
         # Bước 6: Burn sub (optional)
         final_output_video = final_video
         if burn_sub and segs_vi and srt_path:
+            _progress(6, 30, "Burning subtitle into video...")
             burned = step6_burn(
                 final_video, srt_path, cover_meta, out_dir,
                 subtitle_font_scale=subtitle_font_scale,
@@ -670,9 +685,13 @@ def process_video(
             )
             if Path(burned).exists():
                 final_output_video = burned
+            _progress(6, 100, "Step 6 completed")
+        elif not burn_sub:
+            _progress(6, 100, "Burn subtitle disabled, skipped")
 
         # Bước 7: Lồng tiếng (optional)
         if enable_dub and segs_vi:
+            _progress(7, 30, "Generating dub...")
             dub_segments = list(segs_vi)
             if srt_path:
                 parsed = parse_srt(Path(srt_path))
@@ -694,6 +713,9 @@ def process_video(
                 log_cb=log_cb,
             )
             final_output_video = str(dubbed["dub_video"])
+            _progress(7, 100, "Step 7 completed")
+        elif not enable_dub:
+            _progress(7, 100, "Dub disabled, skipped")
 
         retimed_final_output = _retime_final_video_if_needed(
             final_output_video,
