@@ -121,7 +121,14 @@ def _is_oom_error(exc: BaseException) -> bool:
     )
 
 
-def _run_transcription(audio: Path, model_name: str, device: str, use_fp16: bool, log_cb=None) -> list:
+def _run_transcription(
+    audio: Path,
+    model_name: str,
+    device: str,
+    use_fp16: bool,
+    source_language: str | None = None,
+    log_cb=None,
+) -> list:
     def _log(message):
         if log_cb:
             log_cb(message)
@@ -139,8 +146,9 @@ def _run_transcription(audio: Path, model_name: str, device: str, use_fp16: bool
         _log("->  Model san sang. Dang nhan dang...")
 
         kwargs = {"verbose": False, "task": "transcribe", "fp16": use_fp16}
-        if config["source_language"]:
-            kwargs["language"] = config["source_language"]
+        language = source_language if source_language not in (None, "") else config["source_language"]
+        if language:
+            kwargs["language"] = language
 
         result = model.transcribe(str(audio), **kwargs)
         segments = result.get("segments", [])
@@ -148,7 +156,12 @@ def _run_transcription(audio: Path, model_name: str, device: str, use_fp16: bool
         return segments
 
 
-def transcribe(audio: Path, log_cb: Optional[Callable[[str], None]] = None) -> List[Dict[str, Any]]:
+def transcribe(
+    audio: Path,
+    log_cb: Optional[Callable[[str], None]] = None,
+    model_name: Optional[str] = None,
+    source_language: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """Transcribe audio file using Whisper speech recognition.
 
     Automatically selects optimal device (CUDA or CPU) based on hardware compatibility.
@@ -178,7 +191,7 @@ def transcribe(audio: Path, log_cb: Optional[Callable[[str], None]] = None) -> L
         if ffmpeg_dir not in path_parts:
             os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
 
-    model_name = config["whisper_model"]
+    model_name = model_name or config["whisper_model"]
     device_info = _get_device()
     if len(device_info) == 3:
         device, use_fp16, fallback_reason = device_info
@@ -190,12 +203,12 @@ def transcribe(audio: Path, log_cb: Optional[Callable[[str], None]] = None) -> L
         _log(f"->  Bo qua CUDA: {fallback_reason}")
 
     try:
-        return _run_transcription(audio, model_name, device, use_fp16, log_cb)
+        return _run_transcription(audio, model_name, device, use_fp16, source_language, log_cb)
     except RuntimeError as exc:
         if device == "cuda" and _is_oom_error(exc):
             _log("! Whisper het bo nho tren CUDA. Thu lai tren CPU de tranh vo ung dung...")
             _unload_model()
-            return _run_transcription(audio, model_name, "cpu", False, log_cb)
+            return _run_transcription(audio, model_name, "cpu", False, source_language, log_cb)
         raise
     finally:
         _unload_model()

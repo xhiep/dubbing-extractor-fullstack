@@ -16,7 +16,7 @@ from .downloader.ytdlp_wrapper import download
 from .transcription.whisper_engine import transcribe
 from .transcription.translator import translate
 from .transcription.srt_generator import write_srt, parse_srt
-from .video_processing.ffmpeg_wrapper import extract_audio_local, get_dims, retime_video_with_audio
+from .video_processing.ffmpeg_wrapper import extract_audio_local, get_dims, retime_video_with_audio, ffmpeg_cmd
 from .video_processing.subtitle_detector import detect_sub_events
 from .video_processing.video_encoder import render_clean_video
 from .video_processing.subtitle_burner import burn_subtitle
@@ -166,6 +166,8 @@ def step1_prepare(
 
 def step2_transcribe(
     audio_path: str,
+    whisper_model: Optional[str] = None,
+    whisper_language: Optional[str] = None,
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> List[Dict[str, Any]]:
     """Transcribe audio using Whisper speech recognition.
@@ -188,7 +190,12 @@ def step2_transcribe(
     """
     _log = _make_log(log_cb)
     _log("\n" + "="*52 + "\n  BƯỚC 2: NHẬN DẠNG GIỌNG NÓI (WHISPER)\n" + "="*52)
-    segs = transcribe(Path(audio_path), log_cb)
+    segs = transcribe(
+        Path(audio_path),
+        log_cb,
+        model_name=whisper_model,
+        source_language=whisper_language,
+    )
     return segs or []
 
 
@@ -542,6 +549,82 @@ def step7_dub(
     return dubbed
 
 
+def _normalize_output_format(output_format: Optional[str]) -> str:
+    value = (output_format or "mp4").strip().lower()
+    return value if value in {"mp4", "mkv", "webm"} else "mp4"
+
+
+def _convert_video_container(
+    src: Path,
+    dst: Path,
+    output_format: str,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> Path:
+    if src.resolve() == dst.resolve():
+        return dst
+
+    def _log(msg: str):
+        if log_cb:
+            log_cb(msg)
+
+    if dst.exists():
+        dst.unlink()
+
+    ff = ffmpeg_cmd()
+    if output_format == "webm":
+        _log("->  Converting final output to WebM...")
+        cmd = [
+            ff, "-y",
+            "-i", str(src),
+            "-c:v", "libvpx-vp9",
+            "-crf", "32",
+            "-b:v", "0",
+            "-row-mt", "1",
+            "-deadline", "good",
+            "-cpu-used", "4",
+            "-c:a", "libopus",
+            "-b:a", "160k",
+            str(dst),
+        ]
+    else:
+        _log(f"->  Remuxing final output to {output_format.upper()}...")
+        cmd = [
+            ff, "-y",
+            "-i", str(src),
+            "-c", "copy",
+            str(dst),
+        ]
+
+    import subprocess
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "").strip()[-1200:])
+    return dst
+
+
+def _finalize_output_video(
+    video_path: str,
+    out_dir: str,
+    output_format: str,
+    suffix: str,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> str:
+    normalized_format = _normalize_output_format(output_format)
+    src = Path(video_path)
+    if src.suffix.lower() == f".{normalized_format}":
+        return str(src)
+
+    dst = Path(out_dir) / f"{src.stem}_{suffix}.{normalized_format}"
+    converted = _convert_video_container(src, dst, normalized_format, log_cb=log_cb)
+    return str(converted)
+
+
 # ─────────────────────────────────────────────
 #  PIPELINE ĐẦY ĐỦ (giữ nguyên cho nút "Bắt Đầu Xử Lý")
 # ─────────────────────────────────────────────
@@ -552,11 +635,14 @@ def process_video(
     burn_sub: bool = False,
     log_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[int, float, str], None]] = None,
+    whisper_model: Optional[str] = None,
+    whisper_language: Optional[str] = None,
     subtitle_offset_sec: float = 0.0,
     subtitle_timing_scale: float = 1.0,
     render_video_speed: float = 1.0,
     output_video_speed: float = 1.0,
     video_speed: float = 1.0,
+    output_format: str = "mp4",
     srt_max_chars_per_line: int = 45,
     subtitle_font_scale: float = 1.0,
     subtitle_font_size: int = 0,
@@ -622,7 +708,7 @@ def process_video(
 
         # Bước 2
         _progress(2, 15, "Transcribing audio...")
-        segs = step2_transcribe(raw_audio, log_cb)
+        segs = step2_transcribe(raw_audio, whisper_model, whisper_language, log_cb)
         _progress(2, 100, "Step 2 completed")
 
         # Bước 3
@@ -731,6 +817,14 @@ def process_video(
             if target_path.exists():
                 target_path.unlink()
             retimed_path.replace(target_path)
+
+        final_output_video = _finalize_output_video(
+            final_output_video,
+            out_dir,
+            output_format,
+            "final_format",
+            log_cb=log_cb,
+        )
 
         # Summary
         out_dir_path = Path(out_dir)
@@ -908,6 +1002,7 @@ def _collect_step_outputs(state: dict, step_num: int) -> dict:
         "dub_video_path": state.get("dub_video"),
         "render_video_speed": state.get("options", {}).get("render_video_speed", state.get("options", {}).get("video_speed", 1.0)),
         "output_video_speed": state.get("options", {}).get("output_video_speed", 1.0),
+        "output_format": _normalize_output_format(state.get("options", {}).get("output_format", "mp4")),
     }
 
 
@@ -1001,7 +1096,12 @@ def run_single_step(
                 if force_run or not state.get("segments"):
                     _clear_downstream_state(state, 2)
                     _progress(2, 15, "Transcribing audio...")
-                    state["segments"] = step2_transcribe(state["raw_audio"], log_cb)
+                    state["segments"] = step2_transcribe(
+                        state["raw_audio"],
+                        options.get("whisper_model"),
+                        options.get("whisper_language"),
+                        log_cb,
+                    )
                     _ensure_completed_step(state, 2)
                     save_step_state(output_dir, state)
                 _progress(2, 100, "Step 2 completed")
@@ -1104,6 +1204,13 @@ def run_single_step(
                     "burned_speed",
                     log_cb=log_cb,
                 )
+                state["burned_video"] = _finalize_output_video(
+                    state["burned_video"],
+                    state["out_dir"],
+                    options.get("output_format", "mp4"),
+                    "burned_format",
+                    log_cb=log_cb,
+                )
                 _ensure_completed_step(state, 6)
                 save_step_state(output_dir, state)
                 _progress(6, 100, "Step 6 completed")
@@ -1137,6 +1244,13 @@ def run_single_step(
                     render_video_speed,
                     output_video_speed,
                     "dubbed_speed",
+                    log_cb=log_cb,
+                )
+                state["dub_video"] = _finalize_output_video(
+                    state["dub_video"],
+                    state["out_dir"],
+                    options.get("output_format", "mp4"),
+                    "dubbed_format",
                     log_cb=log_cb,
                 )
                 _ensure_completed_step(state, 7)

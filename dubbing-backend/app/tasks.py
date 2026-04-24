@@ -86,13 +86,15 @@ def process_video_task(self, source: str, options: dict, mode: str = "monolithic
             **filtered_options,
         )
 
+        result_dict = _build_process_result_dict(result)
+
         # Emit completion
         try:
-            asyncio.run(emit_completed(task_id, result))
+            asyncio.run(emit_completed(task_id, result_dict))
         except Exception as e:
             logger.error(f"Failed to emit completion: {e}")
 
-        return result
+        return result_dict
 
     except Exception as e:
         logger.error(f"Task {task_id} failed: {e}")
@@ -194,16 +196,75 @@ def _normalize_process_options(options: dict) -> dict:
         normalized['enable_dub'] = normalized.pop('enable_dubbing')
 
     valid_keys = {
-        'cover_mode', 'burn_sub', 'subtitle_offset_sec',
+        'cover_mode', 'burn_sub', 'whisper_model', 'whisper_language', 'subtitle_offset_sec',
         'subtitle_timing_scale', 'video_speed', 'render_video_speed', 'output_video_speed', 'srt_max_chars_per_line',
         'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
         'blur_padding_px', 'cover_offset_px', 'blur_power',
         'locked_subtitle_top_y', 'locked_subtitle_bottom_y',
         'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
         'dub_preset_voice', 'dub_ref_audio', 'dub_ref_text',
-        'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode'
+        'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode', 'output_format'
     }
     return {k: v for k, v in normalized.items() if k in valid_keys}
+
+
+def _build_process_result_dict(result) -> dict:
+    """Convert workflow output to API result payload."""
+    if not isinstance(result, str):
+        return result if isinstance(result, dict) else {}
+
+    out_dir = Path(result)
+    video_file = None
+    audio_file = None
+    srt_file = None
+
+    if out_dir.exists():
+        preferred_video_patterns = [
+            "*_final_format.webm",
+            "*_final_format.mkv",
+            "*_final_format.mp4",
+            "video_sub_viet_long_tieng.webm",
+            "video_sub_viet_long_tieng.mkv",
+            "video_sub_viet_long_tieng.mp4",
+            "video_long_tieng.webm",
+            "video_long_tieng.mkv",
+            "video_long_tieng.mp4",
+            "video_sub_viet.webm",
+            "video_sub_viet.mkv",
+            "video_sub_viet.mp4",
+            "video_ready.webm",
+            "video_ready.mkv",
+            "video_ready.mp4",
+        ]
+        for pattern in preferred_video_patterns:
+            matches = sorted(out_dir.glob(pattern))
+            if matches:
+                video_file = str(matches[0])
+                break
+
+        if not video_file:
+            for ext in ['.webm', '.mkv', '.mp4']:
+                video_files = sorted(out_dir.glob(f'*{ext}'))
+                if video_files:
+                    video_file = str(video_files[0])
+                    break
+
+        for ext in ['.mp3', '.wav', '.m4a']:
+            audio_files = list(out_dir.glob(f'*{ext}'))
+            if audio_files:
+                audio_file = str(audio_files[0])
+                break
+
+        srt_files = list(out_dir.glob('*.srt'))
+        if srt_files:
+            srt_file = str(srt_files[0])
+
+    return {
+        "out_dir": str(out_dir),
+        "video_path": video_file,
+        "audio_path": audio_file,
+        "srt_path": srt_file,
+    }
 
 
 def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
@@ -243,56 +304,7 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
             **filtered_options,
         )
 
-        # Convert result to dict format if it's a string (output directory path)
-        if isinstance(result, str):
-            from pathlib import Path
-            out_dir = Path(result)
-
-            # Find actual output files (they may have different names)
-            video_file = None
-            audio_file = None
-            srt_file = None
-
-            if out_dir.exists():
-                preferred_video_names = [
-                    'video_sub_viet_long_tieng.mp4',
-                    'video_long_tieng.mp4',
-                    'video_sub_viet.mp4',
-                    'video_ready.mp4',
-                ]
-                for name in preferred_video_names:
-                    candidate = out_dir / name
-                    if candidate.exists():
-                        video_file = str(candidate)
-                        break
-
-                if not video_file:
-                    for ext in ['.mp4', '.mkv', '.webm']:
-                        video_files = sorted(out_dir.glob(f'*{ext}'))
-                        if video_files:
-                            video_file = str(video_files[0])
-                            break
-
-                # Look for audio files
-                for ext in ['.mp3', '.wav', '.m4a']:
-                    audio_files = list(out_dir.glob(f'*{ext}'))
-                    if audio_files:
-                        audio_file = str(audio_files[0])
-                        break
-
-                # Look for subtitle files
-                srt_files = list(out_dir.glob('*.srt'))
-                if srt_files:
-                    srt_file = str(srt_files[0])
-
-            result_dict = {
-                "out_dir": str(out_dir),
-                "video_path": video_file,
-                "audio_path": audio_file,
-                "srt_path": srt_file,
-            }
-        else:
-            result_dict = result if isinstance(result, dict) else {}
+        result_dict = _build_process_result_dict(result)
 
         _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result_dict, "step": 7}
 
