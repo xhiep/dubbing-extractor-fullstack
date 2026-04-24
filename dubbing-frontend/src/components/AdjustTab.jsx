@@ -116,6 +116,9 @@ const AdjustTab = () => {
           duration: previewDuration,
           cover_mode: processingOptions.cover_mode,
           cover_strength: processingOptions.cover_strength,
+          subtitle_font_scale: processingOptions.subtitle_font_scale,
+          subtitle_font_size: processingOptions.subtitle_font_size,
+          subtitle_margin_px: processingOptions.subtitle_margin_px,
           blur_padding_px: processingOptions.blur_padding_px,
           cover_offset_px: processingOptions.cover_offset_px,
         })
@@ -355,6 +358,8 @@ const AdjustTab = () => {
                 previewHeight={previewLayout?.height || preview.height}
                 subtitleTopY={previewLayout?.subtitle_top_y}
                 subtitleBottomY={previewLayout?.subtitle_bottom_y}
+                subtitleFontSizeExact={previewLayout?.subtitle_layout?.font_size}
+                subtitleMarginVExact={previewLayout?.subtitle_layout?.margin_v}
                 interactive
                 onSubtitleDrag={handleSubtitleDrag}
               />

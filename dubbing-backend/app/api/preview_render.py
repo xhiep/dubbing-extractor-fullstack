@@ -87,6 +87,9 @@ def _build_layout_response(
     duration: float,
     cover_mode: str,
     cover_strength: int,
+    subtitle_font_scale: float,
+    subtitle_font_size: int,
+    subtitle_margin_px: int,
     blur_padding_px: int,
     cover_offset_px: int,
 ):
@@ -97,6 +100,7 @@ def _build_layout_response(
     sys.path.insert(0, str(backend_dir))
 
     from src.modules.downloader.ytdlp_wrapper import download
+    from src.modules.video_processing.subtitle_burner import compute_subtitle_layout
     from src.modules.video_processing.ffmpeg_wrapper import get_dims
     from src.modules.video_processing.subtitle_detector import detect_sub_events
     from src.modules.video_processing.video_encoder import _representative_band, _expand_band_from_center
@@ -117,6 +121,7 @@ def _build_layout_response(
         subtitle_bottom_y = None
         cover_top_y = None
         cover_bottom_y = None
+        subtitle_layout = None
         if events:
             subtitle_top_y, subtitle_bottom_y = _representative_band(events, height)
             cover_top_y, cover_bottom_y = _expand_band_from_center(
@@ -125,6 +130,14 @@ def _build_layout_response(
                 height,
                 blur_padding_px,
                 cover_offset_px,
+            )
+            subtitle_layout = compute_subtitle_layout(
+                height,
+                subtitle_top_y,
+                subtitle_bottom_y,
+                font_scale=subtitle_font_scale,
+                font_size_override=subtitle_font_size,
+                margin_offset=subtitle_margin_px,
             )
 
         preview_id = uuid.uuid4().hex
@@ -142,6 +155,7 @@ def _build_layout_response(
             "subtitle_bottom_y": subtitle_bottom_y,
             "cover_top_y": cover_top_y,
             "cover_bottom_y": cover_bottom_y,
+            "subtitle_layout": subtitle_layout or {"font_size": None, "margin_v": None},
             "cover_mode": cover_mode,
             "cover_strength": cover_strength,
         }
@@ -159,6 +173,9 @@ async def get_preview_layout(request: PreviewRenderRequest):
             duration=duration,
             cover_mode=request.cover_mode,
             cover_strength=request.cover_strength,
+            subtitle_font_scale=request.subtitle_font_scale,
+            subtitle_font_size=request.subtitle_font_size,
+            subtitle_margin_px=request.subtitle_margin_px,
             blur_padding_px=request.blur_padding_px,
             cover_offset_px=request.cover_offset_px,
         )

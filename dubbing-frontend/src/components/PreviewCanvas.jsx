@@ -41,7 +41,16 @@ const computeSubtitleLayout = ({
   fontScale,
   fontSizeOverride,
   marginOffset,
+  fixedFontSize,
+  fixedMarginV,
 }) => {
+  if (fixedFontSize != null && fixedMarginV != null) {
+    return {
+      marginV: fixedMarginV,
+      fontSize: fixedFontSize,
+    }
+  }
+
   let marginV
   if (subtitleBottomY != null) {
     marginV = Math.min(Math.max(28, videoHeight - subtitleBottomY + 18), Math.floor(videoHeight * 0.22))
@@ -85,6 +94,8 @@ const PreviewCanvas = ({
   previewHeight,
   subtitleTopY,
   subtitleBottomY,
+  subtitleFontSizeExact,
+  subtitleMarginVExact,
   interactive = false,
   onSubtitleDrag,
 }) => {
@@ -144,9 +155,12 @@ const PreviewCanvas = ({
       fontScale: subtitleFontScale,
       fontSizeOverride: subtitleFontSize,
       marginOffset: subtitleMargin,
+      fixedFontSize: subtitleFontSizeExact,
+      fixedMarginV: subtitleMarginVExact,
     })
 
-    const subtitleBaselineY = img.height - Math.round((layout.marginV / frameHeight) * img.height)
+    const scaleY = img.height / frameHeight
+    const subtitleBaselineY = img.height - Math.round(layout.marginV * scaleY)
 
     if (coverMode === 'blur') {
       const tempCanvas = document.createElement('canvas')
@@ -174,20 +188,20 @@ const PreviewCanvas = ({
     if (!wrappedText) return
 
     const lines = wrappedText.split('\n').filter(Boolean)
-    const baseFontSize = Math.max(14, Math.round((layout.fontSize / frameHeight) * img.height))
-    const lineHeight = baseFontSize * 1.3
-    const totalTextHeight = lines.length * lineHeight
-    const startY = subtitleBaselineY - totalTextHeight + lineHeight
+    const baseFontSize = Math.max(14, Math.round(layout.fontSize * scaleY))
+    const lineHeight = Math.round(baseFontSize * 1.12)
+    const lastLineY = subtitleBaselineY
+    const firstLineY = lastLineY - lineHeight * (lines.length - 1)
 
     ctx.font = `bold ${baseFontSize}px Arial, sans-serif`
     ctx.textAlign = 'center'
-    ctx.textBaseline = 'alphabetic'
+    ctx.textBaseline = 'bottom'
     ctx.fillStyle = 'white'
     ctx.strokeStyle = 'black'
-    ctx.lineWidth = baseFontSize * 0.15
+    ctx.lineWidth = Math.max(2, Math.round(baseFontSize * 0.12))
 
     lines.forEach((line, index) => {
-      const y = startY + index * lineHeight
+      const y = firstLineY + index * lineHeight
       ctx.strokeText(line, img.width / 2, y)
       ctx.fillText(line, img.width / 2, y)
     })
@@ -206,6 +220,8 @@ const PreviewCanvas = ({
     previewHeight,
     subtitleTopY,
     subtitleBottomY,
+    subtitleFontSizeExact,
+    subtitleMarginVExact,
   ])
 
   useEffect(() => {
