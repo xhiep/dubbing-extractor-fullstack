@@ -75,6 +75,30 @@ const AdjustTab = () => {
   const outputVideoSpeed = processingOptions.output_video_speed ?? processingOptions.video_speed ?? 1.0
   const exportVsRenderFactor = outputVideoSpeed / Math.max(0.01, renderVideoSpeed)
 
+  const buildLayoutPayload = () => ({
+    source: processingOptions.source,
+    start_time: previewStartTime,
+    duration: Math.min(3, previewDuration),
+    preview_text: previewText,
+    burn_subtitle: processingOptions.burn_subtitle,
+    srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
+    cover_mode: processingOptions.cover_mode,
+    cover_strength: processingOptions.cover_strength,
+    subtitle_font_scale: processingOptions.subtitle_font_scale,
+    subtitle_font_size: processingOptions.subtitle_font_size,
+    subtitle_margin_px: processingOptions.subtitle_margin_px,
+    blur_padding_px: processingOptions.blur_padding_px,
+    cover_offset_px: processingOptions.cover_offset_px,
+    render_video_speed: renderVideoSpeed,
+    video_speed: renderVideoSpeed,
+  })
+
+  const fetchLatestPreviewLayout = async () => {
+    const response = await apiClient.post('/preview-render/layout', buildLayoutPayload())
+    setPreviewLayout(response.data)
+    return response.data
+  }
+
   useEffect(() => {
     if (outputs.video_path && videoRef.current) {
       const filename = outputs.video_path.split('/').pop()
@@ -112,24 +136,7 @@ const AdjustTab = () => {
     const timer = setTimeout(async () => {
       setPreviewLayoutLoading(true)
       try {
-        const response = await apiClient.post('/preview-render/layout', {
-          source: processingOptions.source,
-          start_time: previewStartTime,
-          duration: Math.min(3, previewDuration),
-          preview_text: previewText,
-          burn_subtitle: processingOptions.burn_subtitle,
-          srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
-          cover_mode: processingOptions.cover_mode,
-          cover_strength: processingOptions.cover_strength,
-          subtitle_font_scale: processingOptions.subtitle_font_scale,
-          subtitle_font_size: processingOptions.subtitle_font_size,
-          subtitle_margin_px: processingOptions.subtitle_margin_px,
-          blur_padding_px: processingOptions.blur_padding_px,
-          cover_offset_px: processingOptions.cover_offset_px,
-          render_video_speed: renderVideoSpeed,
-          video_speed: renderVideoSpeed,
-        })
-
+        const response = await apiClient.post('/preview-render/layout', buildLayoutPayload())
         if (!cancelled) {
           setPreviewLayout(response.data)
         }
@@ -249,8 +256,9 @@ const AdjustTab = () => {
     setPreviewRenderUrl(null)
 
     try {
-      const subtitleBand = previewLayout?.subtitle_top_y != null && previewLayout?.subtitle_bottom_y != null
-        ? { topY: previewLayout.subtitle_top_y, bottomY: previewLayout.subtitle_bottom_y }
+      const latestLayout = await fetchLatestPreviewLayout()
+      const subtitleBand = latestLayout?.subtitle_top_y != null && latestLayout?.subtitle_bottom_y != null
+        ? { topY: latestLayout.subtitle_top_y, bottomY: latestLayout.subtitle_bottom_y }
         : getRepresentativeSubtitleBand(effectivePreview?.height || 1080)
 
       const response = await apiClient.post('/preview-render/render', {
@@ -296,7 +304,7 @@ const AdjustTab = () => {
             </div>
             <button
               onClick={handleRenderPreview}
-              disabled={previewRenderLoading || !processingOptions.source}
+              disabled={previewRenderLoading || previewLayoutLoading || !processingOptions.source}
               className="btn btn-primary px-6 py-3 rounded-apple-md flex items-center gap-2 self-start"
             >
               {previewRenderLoading ? (
