@@ -1,5 +1,8 @@
 """Preview render endpoint - generate short preview video with blur + subtitle."""
+import hashlib
+import json
 import logging
+import shutil
 import tempfile
 import uuid
 import subprocess
@@ -14,6 +17,101 @@ router = APIRouter()
 # Store preview videos temporarily
 PREVIEW_CACHE = {}
 PREVIEW_IMAGE_CACHE = {}
+PREVIEW_SOURCE_CACHE = {}
+PREVIEW_SOURCE_DIR = Path("outputs/preview_sources")
+PREVIEW_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _preview_source_key(source: str, start_time: float, duration: float) -> str:
+    normalized = json.dumps({
+        "source": (source or "").strip(),
+        "start_time": round(float(start_time or 0.0), 3),
+        "duration": round(float(duration or 0.0), 3),
+    }, ensure_ascii=True, sort_keys=True)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _load_cached_preview_source(cache_key: str):
+    cached = PREVIEW_SOURCE_CACHE.get(cache_key)
+    if not cached:
+        cache_dir = PREVIEW_SOURCE_DIR / cache_key
+        meta_path = cache_dir / "meta.json"
+        if meta_path.exists():
+            try:
+                cached = json.loads(meta_path.read_text(encoding="utf-8"))
+                PREVIEW_SOURCE_CACHE[cache_key] = cached
+            except Exception:
+                cached = None
+        if not cached:
+            return None
+
+    video_path = Path(cached["video_path"])
+    if not video_path.exists():
+        PREVIEW_SOURCE_CACHE.pop(cache_key, None)
+        return None
+
+    return cached
+
+
+def _ensure_preview_source(source: str, start_time: float, duration: float):
+    import sys
+    from pathlib import Path as P
+
+    backend_dir = P(__file__).parent.parent.parent
+    sys.path.insert(0, str(backend_dir))
+
+    from src.modules.downloader.ytdlp_wrapper import download
+    from src.modules.video_processing.ffmpeg_wrapper import get_dims, probe_duration
+    from src.modules.video_processing.subtitle_detector import detect_sub_events
+    from src.modules.video_processing.video_encoder import _representative_band
+
+    cache_key = _preview_source_key(source, start_time, duration)
+    cached = _load_cached_preview_source(cache_key)
+    if cached:
+        logger.info("Preview source cache hit: %s", cache_key[:12])
+        return cached
+
+    logger.info("Preview source cache miss: %s", cache_key[:12])
+    cache_dir = PREVIEW_SOURCE_DIR / cache_key
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    video_path, _audio_path, _title = download(
+        source,
+        cache_dir,
+        download_range_start=start_time,
+        download_range_end=start_time + duration,
+    )
+
+    source_ext = Path(video_path).suffix or ".mp4"
+    cached_video_path = cache_dir / f"source{source_ext}"
+    if Path(video_path) != cached_video_path:
+        shutil.copy2(video_path, cached_video_path)
+
+    width, height = get_dims(cached_video_path)
+    actual_duration = probe_duration(cached_video_path)
+    events = detect_sub_events(cached_video_path, width, height)
+
+    subtitle_top_y = None
+    subtitle_bottom_y = None
+    if events:
+        subtitle_top_y, subtitle_bottom_y = _representative_band(events, height)
+
+    cached = {
+        "cache_key": cache_key,
+        "video_path": str(cached_video_path),
+        "width": width,
+        "height": height,
+        "duration": actual_duration,
+        "events": events,
+        "subtitle_top_y": subtitle_top_y,
+        "subtitle_bottom_y": subtitle_bottom_y,
+    }
+    PREVIEW_SOURCE_CACHE[cache_key] = cached
+    (cache_dir / "meta.json").write_text(
+        json.dumps(cached, ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    return cached
 
 
 def _build_frontend_preview_band(height: int, top_y: int | None, bottom_y: int | None) -> list[dict]:
@@ -103,26 +201,20 @@ def _build_layout_response(
     backend_dir = P(__file__).parent.parent.parent
     sys.path.insert(0, str(backend_dir))
 
-    from src.modules.downloader.ytdlp_wrapper import download
     from src.modules.transcription.srt_generator import write_srt
     from src.modules.video_processing.subtitle_burner import burn_subtitle as burn_preview_subtitle
     from src.modules.video_processing.subtitle_burner import compute_subtitle_layout
-    from src.modules.video_processing.ffmpeg_wrapper import get_dims, probe_duration
-    from src.modules.video_processing.subtitle_detector import detect_sub_events
     from src.modules.video_processing.video_encoder import _representative_band, _expand_band_from_center, render_clean_video
+
+    source_meta = _ensure_preview_source(source, start_time, duration)
+    source_video_path = Path(source_meta["video_path"])
+    width = int(source_meta["width"])
+    height = int(source_meta["height"])
+    actual_duration = float(source_meta["duration"])
+    events = source_meta["events"] or []
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
-        video_path, _audio_path, _title = download(
-            source,
-            tmp,
-            download_range_start=start_time,
-            download_range_end=start_time + duration,
-        )
-
-        width, height = get_dims(video_path)
-        actual_duration = probe_duration(video_path)
-        events = detect_sub_events(video_path, width, height)
 
         subtitle_top_y = None
         subtitle_bottom_y = None
@@ -151,7 +243,7 @@ def _build_layout_response(
 
         frontend_preview_events = _build_frontend_preview_band(height, subtitle_top_y, subtitle_bottom_y)
         render_meta = render_clean_video(
-            video_path,
+            source_video_path,
             clean_video_path,
             mode=cover_mode,
             events=frontend_preview_events or events,
@@ -240,12 +332,9 @@ async def render_preview(request: PreviewRenderRequest):
         backend_dir = P(__file__).parent.parent.parent
         sys.path.insert(0, str(backend_dir))
 
-        from src.modules.downloader.ytdlp_wrapper import download
         from src.modules.transcription.srt_generator import write_srt
         from src.modules.video_processing.subtitle_burner import burn_subtitle
         from src.modules.video_processing.video_encoder import render_clean_video
-        from src.modules.video_processing.ffmpeg_wrapper import get_dims, probe_duration
-        from src.modules.video_processing.subtitle_detector import detect_sub_events
 
         render_video_speed = float(request.render_video_speed or request.video_speed or 1.0)
 
@@ -255,30 +344,24 @@ async def render_preview(request: PreviewRenderRequest):
 
         logger.info(f"Preview render: {request.source} @ {start_time}s for {duration}s")
 
+        source_meta = _ensure_preview_source(request.source, start_time, duration)
+        source_video_path = Path(source_meta["video_path"])
+        w = int(source_meta["width"])
+        h = int(source_meta["height"])
+        actual_duration = float(source_meta["duration"])
+        detected_events = source_meta["events"] or []
+
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
 
-            # Step 1: Download video segment
-            logger.info("Downloading video segment...")
-            video_path, audio_path, title = download(
-                request.source,
-                tmp,
-                download_range_start=start_time,
-                download_range_end=start_time + duration,
-            )
-
-            # Get video info
-            w, h = get_dims(video_path)
-            actual_duration = probe_duration(video_path)
-
             # Step 2: Detect original subtitle area from the real clip
-            logger.info("Detecting original subtitle area...")
+            logger.info("Preparing preview render from cached source clip...")
             frontend_preview_events = _build_frontend_preview_band(
                 h,
                 request.preview_subtitle_top_y,
                 request.preview_subtitle_bottom_y,
             )
-            events = frontend_preview_events or detect_sub_events(video_path, w, h)
+            events = frontend_preview_events or detected_events
             if events:
                 logger.info("Detected %s subtitle cover events", len(events))
             else:
@@ -288,7 +371,7 @@ async def render_preview(request: PreviewRenderRequest):
             logger.info("Rendering clean preview video...")
             clean_path = tmp / "clean.mp4"
             meta = render_clean_video(
-                video_path,
+                source_video_path,
                 clean_path,
                 mode=request.cover_mode,
                 events=events,
