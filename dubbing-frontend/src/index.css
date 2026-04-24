@@ -259,6 +259,42 @@ body {
   border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--surface-soft-border));
 }
 
+.progress-track {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--surface-soft-border) 70%, transparent), color-mix(in srgb, var(--surface-soft-border) 100%, transparent)),
+    var(--surface-bg);
+  border: 1px solid color-mix(in srgb, var(--surface-soft-border) 75%, transparent);
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, #0071e3 0%, #2997ff 100%);
+}
+
+.progress-runner {
+  width: 56px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
+  mix-blend-mode: screen;
+  animation: progress-runner 1.25s linear infinite;
+}
+
+.theme-dark .progress-runner {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.32) 50%, transparent 100%);
+}
+
+@keyframes progress-runner {
+  0% {
+    transform: translateX(-28px);
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(28px);
+    opacity: 0.25;
+  }
+}
+
 .status-footer {
   background: color-mix(in srgb, var(--surface-bg) 92%, transparent);
   border-top: 1px solid var(--surface-soft-border);
