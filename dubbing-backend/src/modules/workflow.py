@@ -697,3 +697,87 @@ def process_video(
         _log_runtime_memory(log_cb, "cleanup")
         if temp_dir and Path(temp_dir).exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def run_single_step(
+    step_num: int,
+    task_id: str,
+    output_dir: str,
+    step_data: dict,
+    log_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Optional[Callable[[int, float, str], None]] = None,
+) -> dict:
+    """Run a single processing step.
+
+    Args:
+        step_num: Step number (1-7)
+        task_id: Task ID
+        output_dir: Output directory
+        step_data: Step-specific data (url, source, etc.)
+        log_cb: Logging callback
+        progress_cb: Progress callback
+
+    Returns:
+        dict with step outputs
+    """
+    _log = _make_log(log_cb)
+
+    step_names = {
+        1: "Download Video",
+        2: "Extract Audio",
+        3: "Transcribe",
+        4: "Cover Subtitle",
+        5: "Generate TTS",
+        6: "Mix Audio",
+        7: "Burn Subtitle",
+    }
+    step_name = step_names.get(step_num, f"Step {step_num}")
+
+    def _progress(progress: float, message: str):
+        if progress_cb:
+            progress_cb(step_num, progress, message)
+
+    _log(f"Starting step {step_num}: {step_name}")
+    _progress(0, f"{step_name} starting...")
+
+    try:
+        # Step 1: Download Video
+        if step_num == 1:
+            url = step_data.get("url", "")
+            if not url:
+                raise ValueError("URL required for step 1")
+
+            _progress(10, "Downloading video...")
+            result = step1_prepare(url, log_cb)
+            _progress(100, "Download complete")
+            return {
+                "video_path": result.get("raw_video"),
+                "audio_path": result.get("raw_audio"),
+                "title": result.get("title"),
+                "out_dir": result.get("out_dir"),
+            }
+
+        # Step 2: Extract Audio (already done in step 1)
+        elif step_num == 2:
+            _progress(50, "Audio already extracted")
+            _progress(100, "Step 2 complete")
+            return {"status": "skipped", "message": "Audio extracted in step 1"}
+
+        # Step 3: Transcribe
+        elif step_num == 3:
+            audio_path = step_data.get("audio_path", "")
+            if not audio_path:
+                raise ValueError("audio_path required for step 3")
+
+            _progress(10, "Transcribing audio...")
+            result = step2_transcribe(audio_path, log_cb)
+            _progress(100, "Transcription complete")
+            return {"segments": result.get("segments"), "srt_path": result.get("srt_path")}
+
+        # Add other steps as needed...
+        else:
+            raise ValueError(f"Step {step_num} not implemented yet")
+
+    except Exception as e:
+        _log(f"Step {step_num} failed: {e}")
+        raise

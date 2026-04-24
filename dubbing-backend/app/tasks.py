@@ -79,10 +79,8 @@ def process_video_task(self, source: str, options: dict, mode: str = "monolithic
     try:
         # Run workflow
         result = process_video(
-            source=source,
-            output_dir=str(output_dir),
+            source_input=source,
             log_cb=log_callback,
-            progress_cb=progress_callback,
             **options,
         )
 
@@ -187,3 +185,121 @@ def get_task_status(task_id: str) -> dict:
         "outputs": result.result if result.successful() else {},
         "error": str(result.info) if result.failed() else None,
     }
+
+
+# Sync task storage for when Celery is not available
+_sync_tasks = {}
+
+
+def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
+    """Run process_video synchronously (fallback when Celery unavailable)."""
+    from src.modules.workflow import process_video
+    import asyncio
+    from .websocket import emit_progress, emit_log, emit_completed, emit_error
+
+    output_dir = settings.OUTPUT_DIR / task_id
+    _sync_tasks[task_id] = {"status": "running", "progress": 0, "message": "Starting..."}
+
+    def log_callback(msg: str):
+        """Log callback."""
+        logger.info(f"[{task_id}] {msg}")
+        try:
+            asyncio.run(emit_log(task_id, "info", msg))
+        except Exception as e:
+            logger.error(f"Failed to emit log: {e}")
+
+    # Filter options to only valid process_video parameters
+    valid_keys = {
+        'cover_mode', 'burn_sub', 'subtitle_offset_sec',
+        'subtitle_timing_scale', 'video_speed', 'srt_max_chars_per_line',
+        'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
+        'blur_padding_px', 'cover_offset_px', 'blur_power',
+        'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
+        'dub_preset_voice', 'dub_ref_audio', 'dub_ref_text',
+        'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode'
+    }
+    filtered_options = {k: v for k, v in options.items() if k in valid_keys}
+
+    try:
+        # Run workflow
+        result = process_video(
+            source_input=source,
+            log_cb=log_callback,
+            **filtered_options,
+        )
+
+        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result}
+
+        # Emit completion
+        try:
+            asyncio.run(emit_completed(task_id, result))
+        except Exception as e:
+            logger.error(f"Failed to emit completion: {e}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Task {task_id} failed: {e}")
+        _sync_tasks[task_id] = {"status": "failed", "progress": 0, "message": str(e), "error": str(e)}
+        try:
+            asyncio.run(emit_error(task_id, str(e)))
+        except Exception as emit_err:
+            logger.error(f"Failed to emit error: {emit_err}")
+        raise
+
+
+def run_step_sync(step_num: int, task_id: str, step_data: dict):
+    """Run a single step synchronously (fallback when Celery unavailable)."""
+    from src.modules.workflow import run_single_step
+    import asyncio
+    from .websocket import emit_progress, emit_log, emit_error
+
+    output_dir = settings.OUTPUT_DIR / task_id
+    _sync_tasks[task_id] = {"status": "running", "progress": 0, "message": f"Running step {step_num}...", "step": step_num}
+
+    def log_callback(msg: str):
+        """Log callback."""
+        logger.info(f"[{task_id}] Step {step_num}: {msg}")
+        try:
+            asyncio.run(emit_log(task_id, "info", msg))
+        except Exception as e:
+            logger.error(f"Failed to emit log: {e}")
+
+    def progress_callback(step: int, progress: float, message: str):
+        """Progress callback."""
+        logger.info(f"[{task_id}] Step {step}: {progress}% - {message}")
+        _sync_tasks[task_id] = {"status": "running", "progress": progress, "message": message, "step": step}
+        try:
+            asyncio.run(emit_progress(task_id, step, progress, message))
+        except Exception as e:
+            logger.error(f"Failed to emit progress: {e}")
+
+    try:
+        # Run single step
+        result = run_single_step(
+            step_num=step_num,
+            task_id=task_id,
+            output_dir=str(output_dir),
+            step_data=step_data,
+            log_cb=log_callback,
+            progress_cb=progress_callback,
+        )
+
+        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": f"Step {step_num} completed", "result": result, "step": step_num}
+
+        # Emit completion
+        try:
+            asyncio.run(emit_progress(task_id, step_num, 100.0, f"Step {step_num} completed"))
+        except Exception as e:
+            logger.error(f"Failed to emit progress: {e}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Sync step {step_num} failed for task {task_id}: {e}")
+        _sync_tasks[task_id] = {"status": "failed", "progress": 0, "message": str(e), "error": str(e), "step": step_num}
+        try:
+            asyncio.run(emit_error(task_id, str(e)))
+        except Exception as emit_err:
+            logger.error(f"Failed to emit error: {emit_err}")
+        raise

@@ -28,19 +28,20 @@ api.interceptors.response.use(
 
 // API methods
 export const processAPI = {
-  start: (data) => api.post('/process', data),
+  start: (data) => api.post('/process/', data),
   runStep: (stepNum, data) => api.post(`/process/step/${stepNum}`, data),
   getStatus: (taskId) => api.get(`/process/status/${taskId}`),
   cancel: (taskId) => api.post(`/process/cancel/${taskId}`),
 }
 
 export const previewAPI = {
-  getInfo: (source) => api.post('/preview', { source }),
+  getInfo: (source) => api.post('/preview/', { source }),
 }
 
 export const ttsAPI = {
-  listVoices: () => api.get('/tts/voices'),
-  test: (text, voice) => api.post('/tts/test', { text, voice }),
+  checkStatus: (config) => api.post('/tts/status', config),
+  listVoices: (params) => api.get('/tts/voices', { params }),
+  test: (data) => api.post('/tts/test', data),
 }
 
 export default api
