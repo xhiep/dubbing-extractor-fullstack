@@ -32,6 +32,7 @@ class ProcessRequest(BaseModel):
     cover_offset_px: int = 0
 
     # TTS options
+    enable_dub: bool = False
     enable_dubbing: bool = False
     tts_voice: str = "female_north"
 
@@ -68,6 +69,8 @@ class PreviewRenderRequest(BaseModel):
     srt_max_chars_per_line: int = 45
     blur_padding_px: int = 12
     cover_offset_px: int = 0
+    preview_subtitle_top_y: Optional[int] = None
+    preview_subtitle_bottom_y: Optional[int] = None
     render_video_speed: float = 1.0
     output_video_speed: float = 1.0
     video_speed: float = 1.0

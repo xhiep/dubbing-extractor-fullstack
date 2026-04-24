@@ -9,7 +9,11 @@ export const apiClient = axios.create({
 })
 
 export const processAPI = {
-  start: (options) => apiClient.post('/process/', options).then(res => res.data),
+  start: (options) => apiClient.post('/process/', {
+    ...options,
+    enable_dub: options.enable_dub,
+    enable_dubbing: options.enable_dub,
+  }).then(res => res.data),
   cancel: (taskId) => apiClient.post(`/process/cancel/${taskId}`).then(res => res.data),
   status: (taskId) => apiClient.get(`/process/status/${taskId}`).then(res => res.data),
   runStep: (stepNum, data) => apiClient.post(`/process/step/${stepNum}`, data).then(res => res.data),

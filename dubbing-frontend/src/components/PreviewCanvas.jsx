@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
+export const getRepresentativeSubtitleBand = (frameHeight) => {
+  const safeHeight = Math.max(1, frameHeight || 0)
+  return {
+    topY: Math.floor(safeHeight * 0.82),
+    bottomY: Math.floor(safeHeight * 0.92),
+  }
+}
+
 const wrapPreviewText = (text, maxCharsPerLine) => {
   const normalized = (text || '').trim()
   if (!normalized) return ''
@@ -111,8 +119,7 @@ const PreviewCanvas = ({
     ctx.drawImage(img, 0, 0)
 
     const frameHeight = previewHeight || img.height
-    const representativeTopY = Math.floor(frameHeight * 0.82)
-    const representativeBottomY = Math.floor(frameHeight * 0.92)
+    const { topY: representativeTopY, bottomY: representativeBottomY } = getRepresentativeSubtitleBand(frameHeight)
     const coverBand = expandBandFromCenter(
       representativeTopY,
       representativeBottomY,

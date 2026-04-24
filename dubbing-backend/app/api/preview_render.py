@@ -14,6 +14,21 @@ router = APIRouter()
 PREVIEW_CACHE = {}
 
 
+def _build_frontend_preview_band(height: int, top_y: int | None, bottom_y: int | None) -> list[dict]:
+    if top_y is None or bottom_y is None:
+        return []
+    safe_height = max(1, int(height or 1))
+    top = max(0, min(int(top_y), safe_height - 2))
+    bottom = max(top + 1, min(int(bottom_y), safe_height - 1))
+    return [{
+        "start": 0.0,
+        "end": 86400.0,
+        "top_y": top,
+        "bottom_y": bottom,
+        "height": max(2, bottom - top + 1),
+    }]
+
+
 def _build_preview_segments(preview_text: str, duration: float) -> list[dict]:
     """Create a single preview subtitle cue that spans most of the clip."""
     text = (preview_text or "").strip()
@@ -86,7 +101,12 @@ async def render_preview(request: PreviewRenderRequest):
 
             # Step 2: Detect original subtitle area from the real clip
             logger.info("Detecting original subtitle area...")
-            events = detect_sub_events(video_path, w, h)
+            frontend_preview_events = _build_frontend_preview_band(
+                h,
+                request.preview_subtitle_top_y,
+                request.preview_subtitle_bottom_y,
+            )
+            events = frontend_preview_events or detect_sub_events(video_path, w, h)
             if events:
                 logger.info("Detected %s subtitle cover events", len(events))
             else:
@@ -122,8 +142,8 @@ async def render_preview(request: PreviewRenderRequest):
                     clean_path,
                     srt_path,
                     final_path,
-                    subtitle_top_y=meta.get("subtitle_top_y"),
-                    subtitle_bottom_y=meta.get("subtitle_bottom_y"),
+                    subtitle_top_y=request.preview_subtitle_top_y if request.preview_subtitle_top_y is not None else meta.get("subtitle_top_y"),
+                    subtitle_bottom_y=request.preview_subtitle_bottom_y if request.preview_subtitle_bottom_y is not None else meta.get("subtitle_bottom_y"),
                     font_scale=request.subtitle_font_scale,
                     font_size_override=request.subtitle_font_size,
                     margin_offset=request.subtitle_margin_px,

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileVideo, Loader2, Play, RotateCcw } from 'lucide-react'
 import useAppStore from '../store/appStore'
 import { apiClient } from '../api/client'
-import PreviewCanvas from './PreviewCanvas'
+import PreviewCanvas, { getRepresentativeSubtitleBand } from './PreviewCanvas'
 
 const SUBTITLE_PRESETS = {
   custom: null,
@@ -158,6 +158,7 @@ const AdjustTab = () => {
     setPreviewRenderUrl(null)
 
     try {
+      const subtitleBand = getRepresentativeSubtitleBand(preview?.height || 1080)
       const response = await apiClient.post('/preview-render/render', {
         source: processingOptions.source,
         start_time: previewStartTime,
@@ -172,6 +173,8 @@ const AdjustTab = () => {
         srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
         blur_padding_px: processingOptions.blur_padding_px,
         cover_offset_px: processingOptions.cover_offset_px,
+        preview_subtitle_top_y: subtitleBand.topY,
+        preview_subtitle_bottom_y: subtitleBand.bottomY,
         render_video_speed: renderVideoSpeed,
         output_video_speed: outputVideoSpeed,
         video_speed: renderVideoSpeed,
