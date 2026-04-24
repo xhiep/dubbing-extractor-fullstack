@@ -1,0 +1,33 @@
+# Minimal requirements for FastAPI server only
+# Install heavy dependencies (whisper, torch, vieneu) only when needed
+
+# --- Core Web Server ---
+fastapi==0.136.0
+uvicorn==0.45.0
+python-socketio==5.11.0
+aiohttp==3.13.5
+celery==5.4.0
+redis==5.2.1
+
+# --- CORS & Middleware ---
+starlette==1.0.0
+
+# --- Data validation ---
+pydantic==2.13.3
+pydantic_core==2.46.3
+pydantic-settings==2.7.0
+
+# --- HTTP client ---
+httpx==0.28.1
+requests==2.33.1
+
+# --- Utilities ---
+python-dotenv==1.0.0
+typing_extensions==4.15.0
+
+# --- Optional: Install when needed ---
+# openai-whisper==20250625  # For transcription
+# vieneu==2.4.3             # For TTS
+# yt-dlp==2026.3.17         # For video download
+# deep-translator==1.11.4   # For translation
+# torch                     # For ML models

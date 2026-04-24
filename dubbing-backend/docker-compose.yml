@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Redis - Message broker for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: dubbing-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dubbing-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./src:/app/src
+      - ./output:/app/output
+      - ./temp:/app/temp
+      - ./bin:/app/bin
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Celery Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dubbing-worker
+    command: celery -A app.tasks:celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./app:/app/app
+      - ./src:/app/src
+      - ./output:/app/output
+      - ./temp:/app/temp
+      - ./bin:/app/bin
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis_data:
