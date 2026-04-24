@@ -392,11 +392,12 @@ const DubTab = () => {
                   onChange={(e) => updateProcessingOptions({ dub_mix_mode: e.target.value })}
                   className="input w-full"
                 >
+                  <option value="ducking_thong_minh">Ducking Thong Minh (uu tien giọng lồng tiếng)</option>
                   <option value="nen_nho">Nền Nhỏ (giữ nhạc nền nhỏ)</option>
                   <option value="tat_goc">Tắt Gốc (tắt audio gốc)</option>
                 </select>
                 <div className="text-footnote text-apple-gray-secondary mt-1">
-                  Khuyen dung: chon ducking_thong_minh trong setting luu san. Tat_goc = tat audio goc hoan toan.
+                  Ducking thong minh se ha nho audio goc khi co giọng doc. Nen nho giu nhac nen nhe. Tat goc se tat hoan toan audio goc.
                 </div>
               </div>
             </div>
