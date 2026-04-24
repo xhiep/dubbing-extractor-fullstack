@@ -80,6 +80,7 @@ const expandBandFromCenter = (topY, bottomY, frameHeight, paddingPx, offsetPx = 
 
 const PreviewCanvas = ({
   imageUrl,
+  renderedPreview = false,
   thumbnail,
   previewText,
   coverMode,
@@ -131,6 +132,8 @@ const PreviewCanvas = ({
     canvas.width = img.width
     canvas.height = img.height
     ctx.drawImage(img, 0, 0)
+
+    if (renderedPreview) return
 
     const frameHeight = previewHeight || img.height
     const fallbackBand = getRepresentativeSubtitleBand(frameHeight)
@@ -207,6 +210,7 @@ const PreviewCanvas = ({
     })
   }, [
     imageLoaded,
+    renderedPreview,
     previewText,
     coverMode,
     coverStrength,

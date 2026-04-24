@@ -87,11 +87,15 @@ def _build_layout_response(
     duration: float,
     cover_mode: str,
     cover_strength: int,
+    preview_text: str,
+    burn_subtitle: bool,
+    srt_max_chars_per_line: int,
     subtitle_font_scale: float,
     subtitle_font_size: int,
     subtitle_margin_px: int,
     blur_padding_px: int,
     cover_offset_px: int,
+    render_video_speed: float,
 ):
     import sys
     from pathlib import Path as P
@@ -100,10 +104,12 @@ def _build_layout_response(
     sys.path.insert(0, str(backend_dir))
 
     from src.modules.downloader.ytdlp_wrapper import download
+    from src.modules.transcription.srt_generator import write_srt
+    from src.modules.video_processing.subtitle_burner import burn_subtitle as burn_preview_subtitle
     from src.modules.video_processing.subtitle_burner import compute_subtitle_layout
-    from src.modules.video_processing.ffmpeg_wrapper import get_dims
+    from src.modules.video_processing.ffmpeg_wrapper import get_dims, probe_duration
     from src.modules.video_processing.subtitle_detector import detect_sub_events
-    from src.modules.video_processing.video_encoder import _representative_band, _expand_band_from_center
+    from src.modules.video_processing.video_encoder import _representative_band, _expand_band_from_center, render_clean_video
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -115,6 +121,7 @@ def _build_layout_response(
         )
 
         width, height = get_dims(video_path)
+        actual_duration = probe_duration(video_path)
         events = detect_sub_events(video_path, width, height)
 
         subtitle_top_y = None
@@ -122,6 +129,8 @@ def _build_layout_response(
         cover_top_y = None
         cover_bottom_y = None
         subtitle_layout = None
+        clean_video_path = tmp / "layout_clean.mp4"
+        final_video_path = clean_video_path
         if events:
             subtitle_top_y, subtitle_bottom_y = _representative_band(events, height)
             cover_top_y, cover_bottom_y = _expand_band_from_center(
@@ -140,11 +149,43 @@ def _build_layout_response(
                 margin_offset=subtitle_margin_px,
             )
 
+        frontend_preview_events = _build_frontend_preview_band(height, subtitle_top_y, subtitle_bottom_y)
+        render_meta = render_clean_video(
+            video_path,
+            clean_video_path,
+            mode=cover_mode,
+            events=frontend_preview_events or events,
+            blur_power=cover_strength,
+            blur_padding_px=blur_padding_px,
+            cover_offset_px=cover_offset_px,
+            video_speed=render_video_speed,
+        )
+
+        if burn_subtitle and (preview_text or "").strip():
+            srt_path = tmp / "layout_preview_subtitle.srt"
+            preview_segments = _build_preview_segments(preview_text, actual_duration)
+            write_srt(
+                preview_segments,
+                srt_path,
+                max_chars_per_line=max(10, int(srt_max_chars_per_line or 45)),
+            )
+            final_video_path = tmp / "layout_preview_burned.mp4"
+            burn_preview_subtitle(
+                clean_video_path,
+                srt_path,
+                final_video_path,
+                subtitle_top_y=subtitle_top_y if subtitle_top_y is not None else render_meta.get("subtitle_top_y"),
+                subtitle_bottom_y=subtitle_bottom_y if subtitle_bottom_y is not None else render_meta.get("subtitle_bottom_y"),
+                font_scale=subtitle_font_scale,
+                font_size_override=subtitle_font_size,
+                margin_offset=subtitle_margin_px,
+            )
+
         preview_id = uuid.uuid4().hex
         preview_dir = Path("outputs/previews")
         preview_dir.mkdir(parents=True, exist_ok=True)
         frame_path = preview_dir / f"{preview_id}.jpg"
-        _extract_preview_frame(video_path, frame_path)
+        _extract_preview_frame(final_video_path, frame_path, seek_sec=0.6)
         PREVIEW_IMAGE_CACHE[preview_id] = str(frame_path)
 
         return {
@@ -173,11 +214,15 @@ async def get_preview_layout(request: PreviewRenderRequest):
             duration=duration,
             cover_mode=request.cover_mode,
             cover_strength=request.cover_strength,
+            preview_text=request.preview_text,
+            burn_subtitle=request.burn_subtitle,
+            srt_max_chars_per_line=request.srt_max_chars_per_line,
             subtitle_font_scale=request.subtitle_font_scale,
             subtitle_font_size=request.subtitle_font_size,
             subtitle_margin_px=request.subtitle_margin_px,
             blur_padding_px=request.blur_padding_px,
             cover_offset_px=request.cover_offset_px,
+            render_video_speed=float(request.render_video_speed or request.video_speed or 1.0),
         )
     except Exception as e:
         logger.error(f"Failed to build preview layout: {e}", exc_info=True)

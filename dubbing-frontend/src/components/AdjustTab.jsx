@@ -114,6 +114,9 @@ const AdjustTab = () => {
           source: processingOptions.source,
           start_time: previewStartTime,
           duration: previewDuration,
+          preview_text: previewText,
+          burn_subtitle: processingOptions.burn_subtitle,
+          srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
           cover_mode: processingOptions.cover_mode,
           cover_strength: processingOptions.cover_strength,
           subtitle_font_scale: processingOptions.subtitle_font_scale,
@@ -121,6 +124,8 @@ const AdjustTab = () => {
           subtitle_margin_px: processingOptions.subtitle_margin_px,
           blur_padding_px: processingOptions.blur_padding_px,
           cover_offset_px: processingOptions.cover_offset_px,
+          render_video_speed: renderVideoSpeed,
+          video_speed: renderVideoSpeed,
         })
         if (!cancelled) {
           setPreviewLayout(response.data)
@@ -144,12 +149,19 @@ const AdjustTab = () => {
   }, [
     processingOptions.source,
     preview,
+    previewText,
     previewStartTime,
     previewDuration,
     processingOptions.cover_mode,
     processingOptions.cover_strength,
+    processingOptions.burn_subtitle,
+    processingOptions.srt_max_chars_per_line,
+    processingOptions.subtitle_font_scale,
+    processingOptions.subtitle_font_size,
+    processingOptions.subtitle_margin_px,
     processingOptions.blur_padding_px,
     processingOptions.cover_offset_px,
+    renderVideoSpeed,
   ])
 
   useEffect(() => {
@@ -344,6 +356,7 @@ const AdjustTab = () => {
             ) : preview && preview.thumbnail && !thumbnailError ? (
               <PreviewCanvas
                 imageUrl={previewLayout?.image_url || null}
+                renderedPreview={Boolean(previewLayout?.image_url)}
                 thumbnail={preview.thumbnail}
                 previewText={processingOptions.burn_subtitle ? previewText : ''}
                 coverMode={processingOptions.cover_mode}
