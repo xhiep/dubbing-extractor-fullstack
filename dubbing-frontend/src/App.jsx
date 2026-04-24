@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Clapperboard, FileText, Mic2, Moon, Settings2, Sun } from 'lucide-react'
+import { Clapperboard, FileText, Loader2, Mic2, Moon, Settings2, Sun, Trash2 } from 'lucide-react'
 import useAppStore from './store/appStore'
 import useWebSocket from './hooks/useWebSocket'
 import { useProcessing } from './hooks/useProcessing'
-import { ttsAPI } from './api/client'
+import { systemAPI, ttsAPI } from './api/client'
 import SourceTab from './components/SourceTab'
 import AdjustTab from './components/AdjustTab'
 import DubTab from './components/DubTab'
@@ -16,6 +16,7 @@ import OutputPanel from './components/OutputPanel'
 
 function App() {
   const [activeTab, setActiveTab] = useState('source')
+  const [cleaningStorage, setCleaningStorage] = useState(false)
   const { connected } = useWebSocket()
   const {
     status,
@@ -55,9 +56,12 @@ function App() {
 
       try {
         const result = await ttsAPI.checkRefAudio(refAudioPath)
-        if (!cancelled && !result.exists) {
-          updateProcessingOptions({ dub_ref_audio: '' })
-          toast.error('File giong mau da mat. Setting duong dan cu da duoc xoa.')
+        if (!cancelled && (!result.exists || !result.allowed)) {
+          updateProcessingOptions({
+            dub_ref_audio: '',
+            dub_ref_text: '',
+          })
+          toast.error('File giong mau da mat hoac path khong hop le. Setting cu da duoc xoa.')
         }
       } catch (error) {
         if (!cancelled) {
@@ -72,6 +76,19 @@ function App() {
       cancelled = true
     }
   }, [processingOptions.dub_ref_audio, updateProcessingOptions])
+
+  const handleCleanupStorage = async () => {
+    setCleaningStorage(true)
+    try {
+      const result = await systemAPI.cleanupStorage()
+      toast.success(result.message || 'Da don dep cache/temp.')
+    } catch (error) {
+      console.error('Failed to clean storage:', error)
+      toast.error(error.response?.data?.detail || error.message)
+    } finally {
+      setCleaningStorage(false)
+    }
+  }
 
   return (
     <div className="app-shell min-h-screen bg-apple-gray text-apple-ink font-sf-text">
@@ -104,6 +121,17 @@ function App() {
               >
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 {isDark ? 'Light' : 'Dark'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCleanupStorage}
+                disabled={cleaningStorage}
+                className="btn btn-tertiary btn-pill flex items-center gap-2 px-4 py-2"
+                title="Xoa preview cache, preview render va file tam"
+              >
+                {cleaningStorage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {cleaningStorage ? 'Dang Don' : 'Don Cache/Temp'}
               </button>
 
               {isStepByStepMode ? (

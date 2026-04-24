@@ -31,3 +31,7 @@ export const ttsAPI = {
   test: (payload) => apiClient.post('/tts/test', payload).then(res => res.data),
   checkRefAudio: (path) => apiClient.get('/tts/ref-audio-status', { params: { path } }).then(res => res.data),
 }
+
+export const systemAPI = {
+  cleanupStorage: () => apiClient.post('/system/cleanup-storage').then(res => res.data),
+}

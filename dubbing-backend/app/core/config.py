@@ -34,7 +34,10 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).parent.parent.parent.parent
     OUTPUT_DIR: Path = BASE_DIR / "output"
     TEMP_DIR: Path = BASE_DIR / "temp"
-    REF_AUDIO_DIR: Path = BASE_DIR / "storage" / "ref-audio"
+    STORAGE_DIR: Path = BASE_DIR / "storage"
+    REF_AUDIO_DIR: Path = STORAGE_DIR / "ref-audio"
+    PREVIEW_SOURCE_CACHE_DIR: Path = STORAGE_DIR / "preview-source-cache"
+    PREVIEW_RENDER_DIR: Path = STORAGE_DIR / "preview-renders"
 
     # Processing
     MAX_CONCURRENT_TASKS: int = 2
@@ -51,4 +54,7 @@ settings = Settings()
 # Ensure directories exist
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 settings.REF_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+settings.PREVIEW_SOURCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+settings.PREVIEW_RENDER_DIR.mkdir(parents=True, exist_ok=True)

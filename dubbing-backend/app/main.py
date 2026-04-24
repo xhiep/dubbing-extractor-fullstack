@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 import socketio
 
 from .core.config import settings
-from .api import process, preview, tts, preview_render
+from .api import process, preview, tts, preview_render, system
 from .websocket import sio
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ app.include_router(process.router, prefix=f"{settings.API_V1_PREFIX}/process", t
 app.include_router(preview.router, prefix=f"{settings.API_V1_PREFIX}/preview", tags=["preview"])
 app.include_router(preview_render.router, prefix=f"{settings.API_V1_PREFIX}/preview-render", tags=["preview-render"])
 app.include_router(tts.router, prefix=f"{settings.API_V1_PREFIX}/tts", tags=["tts"])
+app.include_router(system.router, prefix=f"{settings.API_V1_PREFIX}/system", tags=["system"])
 
 
 @app.get("/")

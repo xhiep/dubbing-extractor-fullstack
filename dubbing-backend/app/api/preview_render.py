@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from ..core.config import settings
 from ..models.schemas import PreviewRenderRequest, PreviewRenderResponse
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ router = APIRouter()
 PREVIEW_CACHE = {}
 PREVIEW_IMAGE_CACHE = {}
 PREVIEW_SOURCE_CACHE = {}
-PREVIEW_SOURCE_DIR = Path("outputs/preview_sources")
+PREVIEW_SOURCE_DIR = settings.PREVIEW_SOURCE_CACHE_DIR
 PREVIEW_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -274,7 +275,7 @@ def _build_layout_response(
             )
 
         preview_id = uuid.uuid4().hex
-        preview_dir = Path("outputs/previews")
+        preview_dir = settings.PREVIEW_RENDER_DIR
         preview_dir.mkdir(parents=True, exist_ok=True)
         frame_path = preview_dir / f"{preview_id}.jpg"
         _extract_preview_frame(final_video_path, frame_path, seek_sec=0.6)
@@ -409,7 +410,7 @@ async def render_preview(request: PreviewRenderRequest):
 
             # Move to permanent location
             preview_id = uuid.uuid4().hex
-            preview_dir = Path("outputs/previews")
+            preview_dir = settings.PREVIEW_RENDER_DIR
             preview_dir.mkdir(parents=True, exist_ok=True)
             permanent_path = preview_dir / f"{preview_id}.mp4"
             final_path.rename(permanent_path)

@@ -42,7 +42,6 @@ def _resolve_ref_audio_path(raw_path: str) -> Path:
 def _is_allowed_ref_audio_path(path: Path) -> bool:
     allowed_roots = [
         settings.REF_AUDIO_DIR.resolve(),
-        settings.TEMP_DIR.resolve(),
     ]
     return any(str(path).startswith(str(root)) for root in allowed_roots)
 
