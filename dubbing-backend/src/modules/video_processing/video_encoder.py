@@ -275,6 +275,8 @@ def render_clean_video(
     cover_offset_px: int = 0,
     blur_power: int = 4,
     video_speed: float = 1.0,
+    locked_subtitle_top_y: Optional[int] = None,
+    locked_subtitle_bottom_y: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Render video with subtitle covering.
     
@@ -329,7 +331,11 @@ def render_clean_video(
         effective_mode = "none"
         meta["subtitle_top_y"] = None
     else:
-        subtitle_top_y, subtitle_bottom_y = _representative_band(events, h)
+        if locked_subtitle_top_y is not None and locked_subtitle_bottom_y is not None:
+            subtitle_top_y = max(0, min(int(locked_subtitle_top_y), h - 2))
+            subtitle_bottom_y = max(subtitle_top_y + 1, min(int(locked_subtitle_bottom_y), h - 1))
+        else:
+            subtitle_top_y, subtitle_bottom_y = _representative_band(events, h)
         cover_top_y, cover_bottom_y = _expand_band_from_center(
             subtitle_top_y,
             subtitle_bottom_y,

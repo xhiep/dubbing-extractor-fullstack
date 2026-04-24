@@ -211,6 +211,7 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
         'subtitle_timing_scale', 'video_speed', 'render_video_speed', 'output_video_speed', 'srt_max_chars_per_line',
         'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
         'blur_padding_px', 'cover_offset_px', 'blur_power',
+        'locked_subtitle_top_y', 'locked_subtitle_bottom_y',
         'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
         'dub_preset_voice', 'dub_ref_audio', 'dub_ref_text',
         'dub_voice_volume', 'dub_source_volume', 'dub_mix_mode'

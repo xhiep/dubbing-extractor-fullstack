@@ -168,6 +168,28 @@ const AdjustTab = () => {
   ])
 
   useEffect(() => {
+    if (!previewLayout) return
+
+    const nextTop = previewLayout.subtitle_top_y ?? null
+    const nextBottom = previewLayout.subtitle_bottom_y ?? null
+
+    if (
+      processingOptions.locked_subtitle_top_y !== nextTop ||
+      processingOptions.locked_subtitle_bottom_y !== nextBottom
+    ) {
+      updateProcessingOptions({
+        locked_subtitle_top_y: nextTop,
+        locked_subtitle_bottom_y: nextBottom,
+      })
+    }
+  }, [
+    previewLayout,
+    processingOptions.locked_subtitle_top_y,
+    processingOptions.locked_subtitle_bottom_y,
+    updateProcessingOptions,
+  ])
+
+  useEffect(() => {
     const matchedPreset = Object.entries(SUBTITLE_PRESETS).find(([key, value]) => (
       key !== 'custom' &&
       value.subtitle_font_scale === processingOptions.subtitle_font_scale &&

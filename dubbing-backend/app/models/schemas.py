@@ -30,6 +30,8 @@ class ProcessRequest(BaseModel):
     # Cover geometry
     blur_padding_px: int = 12
     cover_offset_px: int = 0
+    locked_subtitle_top_y: Optional[int] = None
+    locked_subtitle_bottom_y: Optional[int] = None
 
     # TTS options
     enable_dub: bool = False

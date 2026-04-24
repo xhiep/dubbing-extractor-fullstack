@@ -241,6 +241,8 @@ def step4_cover(
     cover_offset_px: int = 0,
     blur_power: int = 4,
     render_video_speed: float = 1.0,
+    locked_subtitle_top_y: Optional[int] = None,
+    locked_subtitle_bottom_y: Optional[int] = None,
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     """Cover original subtitles and render clean video.
@@ -295,6 +297,8 @@ def step4_cover(
         cover_offset_px=cover_offset_px,
         blur_power=blur_power,
         video_speed=render_video_speed,
+        locked_subtitle_top_y=locked_subtitle_top_y,
+        locked_subtitle_bottom_y=locked_subtitle_bottom_y,
     )
 
     return {
@@ -559,6 +563,8 @@ def process_video(
     blur_padding_px: int = 12,
     cover_offset_px: int = 0,
     blur_power: int = 4,
+    locked_subtitle_top_y: Optional[int] = None,
+    locked_subtitle_bottom_y: Optional[int] = None,
     enable_dub: bool = False,
     dub_mode: str = "preset",
     dub_backend_mode: str = "turbo",
@@ -627,6 +633,8 @@ def process_video(
             cover_offset_px=cover_offset_px,
             blur_power=blur_power,
             render_video_speed=effective_render_speed,
+            locked_subtitle_top_y=locked_subtitle_top_y,
+            locked_subtitle_bottom_y=locked_subtitle_bottom_y,
             log_cb=log_cb,
         )
         final_video = result4["final_video"]
@@ -1010,6 +1018,8 @@ def run_single_step(
                         cover_offset_px=options.get("cover_offset_px", 0),
                         blur_power=options.get("cover_strength", 15),
                         render_video_speed=render_video_speed,
+                        locked_subtitle_top_y=options.get("locked_subtitle_top_y"),
+                        locked_subtitle_bottom_y=options.get("locked_subtitle_bottom_y"),
                         log_cb=log_cb,
                     )
                     state["final_video"] = result.get("final_video")

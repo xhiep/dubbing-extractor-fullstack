@@ -40,6 +40,8 @@ const useAppStore = create(
     subtitle_offset_sec: 0.0,
     blur_padding_px: 12,
     cover_offset_px: 0,
+    locked_subtitle_top_y: null,
+    locked_subtitle_bottom_y: null,
     render_video_speed: 1.0,
     output_video_speed: 1.0,
     video_speed: 1.0,
