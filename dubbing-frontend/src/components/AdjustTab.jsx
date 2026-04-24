@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileVideo, Loader2, Play, RotateCcw } from 'lucide-react'
 import useAppStore from '../store/appStore'
+import { usePreview } from '../hooks/useProcessing'
 import { apiClient } from '../api/client'
 import PreviewCanvas, { getRepresentativeSubtitleBand } from './PreviewCanvas'
 
@@ -57,18 +58,19 @@ const SectionCard = ({ title, children }) => (
 
 const AdjustTab = () => {
   const { processingOptions, updateProcessingOptions, outputs, preview } = useAppStore()
-  const [previewText, setPreviewText] = useState('Dòng phụ đề mẫu số 1\nDòng phụ đề mẫu số 2')
+  const [previewText, setPreviewText] = useState('Dong phu de mau so 1\nDong phu de mau so 2')
   const [subtitlePreset, setSubtitlePreset] = useState('default')
-  const [thumbnailError, setThumbnailError] = useState(false)
   const [previewRenderLoading, setPreviewRenderLoading] = useState(false)
   const [previewRenderUrl, setPreviewRenderUrl] = useState(null)
-  const [previewStartTime, setPreviewStartTime] = useState(10)
-  const [previewDuration, setPreviewDuration] = useState(15)
+  const [previewStartTime, setPreviewStartTime] = useState(1)
+  const [previewDuration, setPreviewDuration] = useState(5)
   const [previewLayout, setPreviewLayout] = useState(null)
   const [previewLayoutLoading, setPreviewLayoutLoading] = useState(false)
   const videoRef = useRef(null)
+  const { data: previewInfo } = usePreview(processingOptions.source)
 
-  const previewTotalDuration = Math.max(5, Math.floor(preview?.duration || 30))
+  const effectivePreview = previewInfo || preview
+  const previewTotalDuration = Math.max(3, Math.floor(effectivePreview?.duration || 18))
   const renderVideoSpeed = processingOptions.render_video_speed ?? processingOptions.video_speed ?? 1.0
   const outputVideoSpeed = processingOptions.output_video_speed ?? processingOptions.video_speed ?? 1.0
   const exportVsRenderFactor = outputVideoSpeed / Math.max(0.01, renderVideoSpeed)
@@ -101,7 +103,7 @@ const AdjustTab = () => {
   ])
 
   useEffect(() => {
-    if (!processingOptions.source || !preview) {
+    if (!processingOptions.source || !effectivePreview) {
       setPreviewLayout(null)
       return
     }
@@ -113,7 +115,7 @@ const AdjustTab = () => {
         const response = await apiClient.post('/preview-render/layout', {
           source: processingOptions.source,
           start_time: previewStartTime,
-          duration: previewDuration,
+          duration: Math.min(3, previewDuration),
           preview_text: previewText,
           burn_subtitle: processingOptions.burn_subtitle,
           srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
@@ -127,6 +129,7 @@ const AdjustTab = () => {
           render_video_speed: renderVideoSpeed,
           video_speed: renderVideoSpeed,
         })
+
         if (!cancelled) {
           setPreviewLayout(response.data)
         }
@@ -148,7 +151,7 @@ const AdjustTab = () => {
     }
   }, [
     processingOptions.source,
-    preview,
+    effectivePreview,
     previewText,
     previewStartTime,
     previewDuration,
@@ -226,7 +229,8 @@ const AdjustTab = () => {
     try {
       const subtitleBand = previewLayout?.subtitle_top_y != null && previewLayout?.subtitle_bottom_y != null
         ? { topY: previewLayout.subtitle_top_y, bottomY: previewLayout.subtitle_bottom_y }
-        : getRepresentativeSubtitleBand(preview?.height || 1080)
+        : getRepresentativeSubtitleBand(effectivePreview?.height || 1080)
+
       const response = await apiClient.post('/preview-render/render', {
         source: processingOptions.source,
         start_time: previewStartTime,
@@ -265,7 +269,7 @@ const AdjustTab = () => {
             <div className="flex-1">
               <h2 className="text-utility font-sf-display text-apple-ink">Video Preview</h2>
               <p className="mt-2 text-control text-apple-gray-secondary">
-                Preview bên trái, cụm chỉnh bên phải. Trên màn nhỏ layout sẽ tự rơi xuống 1 cột.
+                Tab nay tu lay frame preview tu backend. Khong can bam preview o tab Nguon truoc.
               </p>
             </div>
             <button
@@ -276,7 +280,7 @@ const AdjustTab = () => {
               {previewRenderLoading ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Đang render...
+                  Dang render...
                 </>
               ) : (
                 <>
@@ -291,28 +295,28 @@ const AdjustTab = () => {
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
               <div>
                 <label className="block text-control font-medium text-apple-gray-secondary mb-2">
-                  Start Time (giây)
+                  Start Time (giay)
                 </label>
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   step="1"
                   value={previewStartTime}
-                  onChange={(e) => setPreviewStartTime(Math.max(0, parseFloat(e.target.value) || 0))}
+                  onChange={(e) => setPreviewStartTime(Math.max(1, parseFloat(e.target.value) || 1))}
                   className="input"
                 />
               </div>
               <div>
                 <label className="block text-control font-medium text-apple-gray-secondary mb-2">
-                  Duration (giây, max 30)
+                  Duration (backend clip 3-8s)
                 </label>
                 <input
                   type="number"
-                  min="5"
-                  max="30"
+                  min="3"
+                  max="8"
                   step="1"
                   value={previewDuration}
-                  onChange={(e) => setPreviewDuration(Math.min(30, Math.max(5, parseFloat(e.target.value) || 15)))}
+                  onChange={(e) => setPreviewDuration(Math.min(8, Math.max(3, parseFloat(e.target.value) || 5)))}
                   className="input"
                 />
               </div>
@@ -323,19 +327,19 @@ const AdjustTab = () => {
             </div>
 
             <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-4">
                 <p className="text-control font-medium text-apple-ink">Timeline Preview</p>
                 <p className="text-micro text-apple-gray-secondary">
-                  Kéo timeline để chọn mốc preview rồi render clip tại mốc đó.
+                  Chon moc timeline roi render backend clip ngan tai moc do.
                 </p>
               </div>
               <input
                 type="range"
-                min="0"
+                min="1"
                 max={previewTotalDuration}
                 step="0.5"
-                value={Math.min(previewStartTime, previewTotalDuration)}
-                onChange={(e) => setPreviewStartTime(parseFloat(e.target.value))}
+                value={Math.max(1, Math.min(previewStartTime, previewTotalDuration))}
+                onChange={(e) => setPreviewStartTime(Math.max(1, parseFloat(e.target.value)))}
                 className="w-full accent-apple-blue"
                 disabled={!processingOptions.source}
               />
@@ -351,13 +355,12 @@ const AdjustTab = () => {
                 className="w-full h-full object-contain"
                 src={previewRenderUrl}
               >
-                Video không được hỗ trợ
+                Video khong duoc ho tro
               </video>
-            ) : preview && preview.thumbnail && !thumbnailError ? (
+            ) : previewLayout?.image_url ? (
               <PreviewCanvas
-                imageUrl={previewLayout?.image_url || null}
-                renderedPreview={Boolean(previewLayout?.image_url)}
-                thumbnail={preview.thumbnail}
+                imageUrl={previewLayout.image_url}
+                renderedPreview
                 previewText={processingOptions.burn_subtitle ? previewText : ''}
                 coverMode={processingOptions.cover_mode}
                 coverStrength={processingOptions.cover_strength}
@@ -367,28 +370,34 @@ const AdjustTab = () => {
                 blurPadding={processingOptions.blur_padding_px}
                 coverOffset={processingOptions.cover_offset_px}
                 maxCharsPerLine={processingOptions.srt_max_chars_per_line}
-                previewWidth={previewLayout?.width || preview.width}
-                previewHeight={previewLayout?.height || preview.height}
-                subtitleTopY={previewLayout?.subtitle_top_y}
-                subtitleBottomY={previewLayout?.subtitle_bottom_y}
-                subtitleFontSizeExact={previewLayout?.subtitle_layout?.font_size}
-                subtitleMarginVExact={previewLayout?.subtitle_layout?.margin_v}
+                previewWidth={previewLayout.width}
+                previewHeight={previewLayout.height}
+                subtitleTopY={previewLayout.subtitle_top_y}
+                subtitleBottomY={previewLayout.subtitle_bottom_y}
+                subtitleFontSizeExact={previewLayout.subtitle_layout?.font_size}
+                subtitleMarginVExact={previewLayout.subtitle_layout?.margin_v}
                 interactive
                 onSubtitleDrag={handleSubtitleDrag}
               />
+            ) : processingOptions.source && (previewLayoutLoading || effectivePreview) ? (
+              <div className="text-apple-gray-secondary text-center px-6">
+                <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin opacity-70" />
+                <p className="text-control">Dang tao frame preview tu backend...</p>
+                <p className="text-micro mt-1">Frame nay duoc cap nhat doc lap voi tab Nguon Video.</p>
+              </div>
             ) : outputs.video_path ? (
               <video
                 ref={videoRef}
                 controls
                 className="w-full h-full object-contain"
               >
-                Video không được hỗ trợ
+                Video khong duoc ho tro
               </video>
             ) : (
               <div className="text-apple-gray-secondary text-center px-6">
                 <FileVideo className="w-16 h-16 mx-auto mb-3 opacity-50" />
-                <p className="text-control">Video preview sẽ hiển thị ở đây</p>
-                <p className="text-micro mt-1">Nhập URL ở tab Nguồn Video và bấm Render Preview</p>
+                <p className="text-control">Video preview se hien thi o day</p>
+                <p className="text-micro mt-1">Nhap URL o tab Nguon Video va backend se tu tao frame preview.</p>
               </div>
             )}
           </div>
@@ -396,7 +405,7 @@ const AdjustTab = () => {
           {previewRenderLoading && (
             <div className="notice-info rounded-apple-xl p-4 mt-4">
               <p className="text-blue-600 text-control font-medium">
-                Đang render preview video với blur và subtitle...
+                Dang render preview video voi blur va subtitle...
               </p>
             </div>
           )}
@@ -404,7 +413,7 @@ const AdjustTab = () => {
           {previewLayoutLoading && !previewRenderLoading && (
             <div className="notice-info rounded-apple-xl p-4 mt-4">
               <p className="text-blue-600 text-control font-medium">
-                Đang đồng bộ frame preview thật từ backend...
+                Dang dong bo frame preview that tu backend...
               </p>
             </div>
           )}
@@ -416,7 +425,7 @@ const AdjustTab = () => {
             <textarea
               value={previewText}
               onChange={(e) => setPreviewText(e.target.value)}
-              placeholder="Nhập text để xem preview subtitle..."
+              placeholder="Nhap text de xem preview subtitle..."
               rows={4}
               className="input resize-none"
             />
@@ -427,7 +436,7 @@ const AdjustTab = () => {
                 className="btn btn-secondary px-4 py-2 rounded-apple-md flex items-center gap-2"
               >
                 <RotateCcw className="h-4 w-4" />
-                Reset Vị Trí
+                Reset Vi Tri
               </button>
               <button
                 type="button"
@@ -439,7 +448,7 @@ const AdjustTab = () => {
               </button>
             </div>
             <p className="text-micro text-apple-gray-secondary mt-3">
-              Mẹo: kéo trực tiếp subtitle trên khung preview để căn vị trí dọc trước khi render.
+              Keo truc tiep subtitle tren khung preview de can vi tri doc truoc khi render.
             </p>
           </div>
         </div>
@@ -456,17 +465,17 @@ const AdjustTab = () => {
               onChange={(e) => updateProcessingOptions({ whisper_model: e.target.value })}
               className="input"
             >
-              <option value="tiny">Tiny (nhanh nhất, kém chính xác nhất)</option>
+              <option value="tiny">Tiny (nhanh nhat, kem chinh xac nhat)</option>
               <option value="base">Base</option>
               <option value="small">Small</option>
-              <option value="medium">Medium (khuyên dùng)</option>
-              <option value="large">Large (chậm nhất, chính xác nhất)</option>
+              <option value="medium">Medium (khuyen dung)</option>
+              <option value="large">Large (cham nhat, chinh xac nhat)</option>
             </select>
           </div>
 
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Language (để trống để auto-detect)
+              Language (de trong de auto-detect)
             </label>
             <input
               type="text"
@@ -478,7 +487,7 @@ const AdjustTab = () => {
           </div>
         </SectionCard>
 
-        <SectionCard title="Che Phụ Đề Gốc">
+        <SectionCard title="Che Phu De Goc">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
               Cover Mode
@@ -541,7 +550,7 @@ const AdjustTab = () => {
           </div>
         </SectionCard>
 
-        <SectionCard title="Phụ Đề">
+        <SectionCard title="Phu De">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
               Subtitle Preset
@@ -551,12 +560,12 @@ const AdjustTab = () => {
               onChange={(e) => applyPreset(e.target.value)}
               className="input"
             >
-              <option value="custom">Tùy chỉnh</option>
-              <option value="default">Mặc định</option>
-              <option value="large">Chữ lớn</option>
-              <option value="compact">Gọn</option>
+              <option value="custom">Tuy chinh</option>
+              <option value="default">Mac dinh</option>
+              <option value="large">Chu lon</option>
+              <option value="compact">Gon</option>
               <option value="tiktok">TikTok</option>
-              <option value="anime">Kiểu Anime</option>
+              <option value="anime">Kieu Anime</option>
             </select>
           </div>
 
@@ -567,7 +576,7 @@ const AdjustTab = () => {
               onChange={(e) => updateProcessingOptions({ burn_subtitle: e.target.checked })}
               className="w-4 h-4 accent-apple-blue"
             />
-            <span className="text-body text-apple-ink font-medium">Burn subtitle vào video</span>
+            <span className="text-body text-apple-ink font-medium">Burn subtitle vao video</span>
           </label>
 
           <div>
