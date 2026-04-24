@@ -25,4 +25,5 @@ export const ttsAPI = {
   checkStatus: (payload) => apiClient.post('/tts/status', payload).then(res => res.data),
   listVoices: (params) => apiClient.get('/tts/voices', { params }).then(res => res.data),
   test: (payload) => apiClient.post('/tts/test', payload).then(res => res.data),
+  checkRefAudio: (path) => apiClient.get('/tts/ref-audio-status', { params: { path } }).then(res => res.data),
 }

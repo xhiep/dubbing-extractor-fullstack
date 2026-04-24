@@ -26,6 +26,10 @@
   - `render_video_speed`: speed used during cover/render/subtitle timing/dubbing generation
   - `output_video_speed`: final exported speed relative to the original video
   - legacy `video_speed` is kept only as a backward-compatibility fallback for old persisted settings/payloads
+- Clone voice reference audio is now intended to live in a stable project folder:
+  - backend upload target: `storage/ref-audio/`
+  - frontend verifies persisted `dub_ref_audio` on app startup
+  - if the old saved path no longer exists, frontend clears `dub_ref_audio` automatically and shows a toast warning
 - VieNeu-TTS status bug was fixed by syncing frontend API client with backend endpoints.
 - Step-by-step mode is being aligned with the old repo:
   - user can choose a target step directly

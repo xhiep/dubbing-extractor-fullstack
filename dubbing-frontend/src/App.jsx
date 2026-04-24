@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Clapperboard, FileText, Mic2, Moon, Settings2, Sun } from 'lucide-react'
 import useAppStore from './store/appStore'
 import useWebSocket from './hooks/useWebSocket'
 import { useProcessing } from './hooks/useProcessing'
+import { ttsAPI } from './api/client'
 import SourceTab from './components/SourceTab'
 import AdjustTab from './components/AdjustTab'
 import DubTab from './components/DubTab'
@@ -23,6 +25,7 @@ function App() {
     processingOptions,
     theme,
     setTheme,
+    updateProcessingOptions,
   } = useAppStore()
   const { start, cancel, isStarting } = useProcessing()
 
@@ -42,6 +45,33 @@ function App() {
     document.documentElement.classList.add(isDark ? 'theme-dark' : 'theme-light')
     document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
   }, [isDark])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const verifyPersistedRefAudio = async () => {
+      const refAudioPath = processingOptions.dub_ref_audio?.trim()
+      if (!refAudioPath) return
+
+      try {
+        const result = await ttsAPI.checkRefAudio(refAudioPath)
+        if (!cancelled && !result.exists) {
+          updateProcessingOptions({ dub_ref_audio: '' })
+          toast.error('File giong mau da mat. Setting duong dan cu da duoc xoa.')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to verify persisted ref audio:', error)
+        }
+      }
+    }
+
+    verifyPersistedRefAudio()
+
+    return () => {
+      cancelled = true
+    }
+  }, [processingOptions.dub_ref_audio, updateProcessingOptions])
 
   return (
     <div className="app-shell min-h-screen bg-apple-gray text-apple-ink font-sf-text">

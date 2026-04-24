@@ -30,6 +30,23 @@ class TTSTestRequest(BaseModel):
     remote_api_base: str = "http://localhost:23333/v1"
 
 
+def _resolve_ref_audio_path(raw_path: str) -> Path:
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = (settings.BASE_DIR / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    return candidate
+
+
+def _is_allowed_ref_audio_path(path: Path) -> bool:
+    allowed_roots = [
+        settings.REF_AUDIO_DIR.resolve(),
+        settings.TEMP_DIR.resolve(),
+    ]
+    return any(str(path).startswith(str(root)) for root in allowed_roots)
+
+
 @router.post("/status")
 async def check_tts_status(request: TTSStatusRequest):
     """Check if VieNeu-TTS is available."""
@@ -163,7 +180,7 @@ async def upload_ref_audio(file: UploadFile = File(...)):
         # Generate unique filename
         file_id = str(uuid.uuid4())
         file_ext = Path(file.filename).suffix if file.filename else ".wav"
-        audio_path = settings.TEMP_DIR / f"ref_audio_{file_id}{file_ext}"
+        audio_path = settings.REF_AUDIO_DIR / f"ref_audio_{file_id}{file_ext}"
 
         # Save uploaded file
         content = await file.read()
@@ -178,4 +195,22 @@ async def upload_ref_audio(file: UploadFile = File(...)):
         }
     except Exception as e:
         logger.error(f"Failed to upload reference audio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ref-audio-status")
+async def get_ref_audio_status(path: str):
+    """Check whether a persisted reference audio path still exists."""
+    try:
+        resolved_path = _resolve_ref_audio_path(path)
+        exists = resolved_path.exists() and resolved_path.is_file()
+        allowed = _is_allowed_ref_audio_path(resolved_path)
+
+        return {
+            "path": str(resolved_path),
+            "exists": bool(exists and allowed),
+            "allowed": allowed,
+        }
+    except Exception as e:
+        logger.error(f"Failed to check reference audio status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
