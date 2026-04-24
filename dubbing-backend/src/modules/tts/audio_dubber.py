@@ -93,29 +93,79 @@ def _volume_filter(volume: float) -> str:
     return f"volume={volume:.3f}"
 
 
+def _stereo_mix_chain(volume: float, role: str) -> str:
+    filters = [
+        "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
+    ]
+
+    safe_volume = max(0.0, float(volume))
+    if safe_volume > 0:
+        filters.append(f"volume={safe_volume:.3f}")
+
+    if role == "dub":
+        filters.extend([
+            "highpass=f=120",
+            "lowpass=f=7600",
+            "dynaudnorm=f=75:g=21:p=0.9:m=15",
+            "alimiter=limit=0.93",
+        ])
+    else:
+        filters.extend([
+            "dynaudnorm=f=250:g=5:p=0.85:m=10",
+        ])
+
+    return ",".join(filters)
+
+
+def _build_mix_filter_complex(source_volume: float, dub_volume: float, mix_mode: str) -> str:
+    source_chain = _stereo_mix_chain(source_volume, "source")
+    dub_chain = _stereo_mix_chain(dub_volume, "dub")
+
+    if mix_mode == "tat_goc":
+        return (
+            f"[1:a]{dub_chain}[dub];"
+            f"[dub]alimiter=limit=0.96[aout]"
+        )
+
+    if mix_mode == "ducking_thong_minh":
+        return (
+            f"[0:a]{source_chain}[orig];"
+            f"[1:a]{dub_chain}[dub];"
+            f"[dub]asplit=2[dubmix][dubsc];"
+            f"[orig][dubsc]sidechaincompress="
+            f"threshold=0.015:ratio=14:attack=12:release=320:makeup=1:link=average[ducked];"
+            f"[ducked][dubmix]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+            f"alimiter=limit=0.96[aout]"
+        )
+
+    return (
+        f"[0:a]{source_chain}[orig];"
+        f"[1:a]{dub_chain}[dub];"
+        f"[orig][dub]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+        f"alimiter=limit=0.96[aout]"
+    )
+
+
 def _mux_dubbed_video(
     video_path: Path,
     dub_track: Path,
     out_path: Path,
     source_volume: float,
     dub_volume: float,
+    mix_mode: str,
     log_cb=None,
 ) -> Path:
     ff = ffmpeg_cmd()
     source_volume = max(0.0, min(1.0, float(source_volume)))
-    source_filter = _volume_filter(source_volume)
-    dub_filter = _volume_filter(dub_volume)
+    dub_volume = max(0.0, min(4.0, float(dub_volume)))
+    filter_complex = _build_mix_filter_complex(source_volume, dub_volume, mix_mode)
+    _log(log_cb, f"->  Mix mode={mix_mode} | source={source_volume:.2f} | dub={dub_volume:.2f}")
     cmd = [
         ff,
         "-y",
         "-i", str(video_path),
         "-i", str(dub_track),
-        "-filter_complex",
-        (
-            f"[0:a]{source_filter}[orig];"
-            f"[1:a]{dub_filter}[dub];"
-            f"[orig][dub]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-        ),
+        "-filter_complex", filter_complex,
         "-map", "0:v:0",
         "-map", "[aout]",
         "-c:v", "copy",
@@ -162,7 +212,7 @@ def render_dubbed_outputs(
         ref_text: Reference text for voice cloning
         dub_volume: Dubbed voice volume multiplier
         source_volume: Original audio volume multiplier
-        mix_mode: Mixing mode (nen_nho keeps original, tat_goc mutes it)
+        mix_mode: Mixing mode (nen_nho, tat_goc, ducking_thong_minh)
         output_video_name: Output video filename
         log_cb: Optional callback function for logging progress
 
@@ -218,7 +268,7 @@ def render_dubbed_outputs(
     _build_dub_track(placements, total_duration, dub_track, log_cb)
     _log(log_cb, "->  Dang mux video long tieng...")
     final_source_volume = 0.0 if mix_mode == "tat_goc" else source_volume
-    _mux_dubbed_video(video_path, dub_track, dubbed_video, final_source_volume, dub_volume, log_cb)
+    _mux_dubbed_video(video_path, dub_track, dubbed_video, final_source_volume, dub_volume, mix_mode, log_cb)
     return {
         "dub_track": dub_track,
         "dub_video": dubbed_video,

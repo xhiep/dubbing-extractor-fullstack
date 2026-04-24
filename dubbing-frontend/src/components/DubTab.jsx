@@ -388,13 +388,16 @@ const DubTab = () => {
                   Cách Mix Audio
                 </label>
                 <select
-                  value={processingOptions.dub_mix_mode || 'nen_nho'}
+                  value={processingOptions.dub_mix_mode || 'ducking_thong_minh'}
                   onChange={(e) => updateProcessingOptions({ dub_mix_mode: e.target.value })}
                   className="input w-full"
                 >
                   <option value="nen_nho">Nền Nhỏ (giữ nhạc nền nhỏ)</option>
                   <option value="tat_goc">Tắt Gốc (tắt audio gốc)</option>
                 </select>
+                <div className="text-footnote text-apple-gray-secondary mt-1">
+                  Khuyen dung: chon ducking_thong_minh trong setting luu san. Tat_goc = tat audio goc hoan toan.
+                </div>
               </div>
             </div>
           </div>

@@ -57,7 +57,7 @@ const useAppStore = create(
     dub_ref_text: '',
     dub_voice_volume: 1.35,
     dub_source_volume: 0.18,
-    dub_mix_mode: 'nen_nho',
+    dub_mix_mode: 'ducking_thong_minh',
   },
 
   // Actions
