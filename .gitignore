@@ -36,6 +36,8 @@ Thumbs.db
 
 # Output
 output/
+dubbing-backend/outputs/
+storage/
 temp/
 *.mp4
 *.mp3
