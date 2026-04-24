@@ -11,6 +11,9 @@ const useAppStore = create((set, get) => ({
   // Outputs
   outputs: {},
 
+  // Preview data
+  preview: null,
+
   // Logs
   logs: [],
   maxLogs: 1000,
@@ -27,10 +30,20 @@ const useAppStore = create((set, get) => ({
     subtitle_font_scale: 1.0,
     subtitle_timing_scale: 1.0,
     subtitle_offset_sec: 0.0,
-    enable_dubbing: false,
-    tts_voice: 'female_north',
     video_speed: 1.0,
     output_format: 'mp4',
+
+    // TTS/Dubbing options
+    enable_dub: false,
+    dub_mode: 'preset',
+    dub_backend_mode: 'turbo',
+    dub_remote_api_base: 'http://localhost:23333/v1',
+    dub_preset_voice: '',
+    dub_ref_audio: '',
+    dub_ref_text: '',
+    dub_voice_volume: 1.35,
+    dub_source_volume: 0.18,
+    dub_mix_mode: 'nen_nho',
   },
 
   // Actions
@@ -45,6 +58,8 @@ const useAppStore = create((set, get) => ({
   }),
 
   setOutputs: (outputs) => set({ outputs }),
+
+  setPreview: (preview) => set({ preview }),
 
   addLog: (level, message) => set((state) => {
     const timestamp = new Date().toISOString()
