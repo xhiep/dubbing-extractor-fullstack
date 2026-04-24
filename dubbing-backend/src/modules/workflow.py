@@ -699,6 +699,147 @@ def process_video(
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+STEP_STATE_FILENAME = "pipeline_state.json"
+
+
+def load_step_state(output_dir: str) -> dict:
+    workspace = Path(output_dir)
+    state_path = workspace / STEP_STATE_FILENAME
+    if not state_path.exists():
+        return {
+            "task_id": workspace.name,
+            "workspace_dir": str(workspace),
+            "completed_steps": [],
+        }
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.setdefault("task_id", workspace.name)
+        state.setdefault("workspace_dir", str(workspace))
+        state.setdefault("completed_steps", [])
+        return state
+    except Exception:
+        return {
+            "task_id": workspace.name,
+            "workspace_dir": str(workspace),
+            "completed_steps": [],
+        }
+
+
+def save_step_state(output_dir: str, state: dict) -> None:
+    workspace = Path(output_dir)
+    workspace.mkdir(parents=True, exist_ok=True)
+    state["workspace_dir"] = str(workspace)
+    state["task_id"] = state.get("task_id") or workspace.name
+    state_path = workspace / STEP_STATE_FILENAME
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _step_options(step_data: dict, state: dict) -> dict:
+    options = dict(state.get("options") or {})
+    options.update(step_data.get("options") or {})
+    return options
+
+
+def _ensure_completed_step(state: dict, step_num: int) -> None:
+    completed = set(state.get("completed_steps") or [])
+    completed.add(step_num)
+    state["completed_steps"] = sorted(completed)
+
+
+def _clear_downstream_state(state: dict, step_num: int) -> None:
+    if step_num <= 1:
+        for key in (
+            "segments",
+            "segments_vi",
+            "srt_path",
+            "final_video",
+            "cover_meta",
+            "burned_video",
+            "dub_track",
+            "dub_video",
+        ):
+            state.pop(key, None)
+    elif step_num <= 2:
+        for key in (
+            "segments_vi",
+            "srt_path",
+            "final_video",
+            "cover_meta",
+            "burned_video",
+            "dub_track",
+            "dub_video",
+        ):
+            state.pop(key, None)
+    elif step_num <= 3:
+        for key in (
+            "final_video",
+            "cover_meta",
+            "burned_video",
+            "dub_track",
+            "dub_video",
+        ):
+            state.pop(key, None)
+    elif step_num <= 4:
+        for key in ("burned_video", "dub_track", "dub_video"):
+            state.pop(key, None)
+    elif step_num <= 5:
+        for key in ("burned_video", "dub_track", "dub_video"):
+            state.pop(key, None)
+    elif step_num <= 6:
+        for key in ("dub_track", "dub_video"):
+            state.pop(key, None)
+
+    state["completed_steps"] = [value for value in state.get("completed_steps", []) if value < step_num]
+
+
+def _load_srt_segments_from_state(state: dict) -> list:
+    srt_path = state.get("srt_path")
+    if srt_path and Path(srt_path).exists():
+        parsed = parse_srt(Path(srt_path))
+        if parsed:
+            state["segments_vi"] = parsed
+            return parsed
+    return list(state.get("segments_vi") or [])
+
+
+def _write_step3_srt(state: dict, max_chars_per_line: int) -> Optional[str]:
+    out_dir = state.get("out_dir")
+    segs_vi = state.get("segments_vi") or []
+    if not out_dir or not segs_vi:
+        return None
+
+    srt_path = Path(out_dir) / "file_sub_viet.srt"
+    write_srt(segs_vi, srt_path, max_chars_per_line=max_chars_per_line)
+    state["srt_path"] = str(srt_path)
+    return str(srt_path)
+
+
+def _collect_step_outputs(state: dict, step_num: int) -> dict:
+    srt_path = state.get("srt_path")
+    srt_content = ""
+    if srt_path and Path(srt_path).exists():
+        srt_content = Path(srt_path).read_text(encoding="utf-8", errors="ignore")
+
+    return {
+        "task_id": state.get("task_id"),
+        "current_step": step_num,
+        "completed_steps": state.get("completed_steps", []),
+        "title": state.get("title"),
+        "out_dir": state.get("out_dir"),
+        "video_path": state.get("burned_video") or state.get("dub_video") or state.get("final_video") or state.get("raw_video"),
+        "audio_path": state.get("raw_audio"),
+        "srt_path": srt_path,
+        "srt_content": srt_content,
+        "cover_meta": state.get("cover_meta") or {},
+        "dub_audio_path": state.get("dub_track"),
+        "dub_video_path": state.get("dub_video"),
+    }
+
+
 def run_single_step(
     step_num: int,
     task_id: str,
@@ -707,77 +848,189 @@ def run_single_step(
     log_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[int, float, str], None]] = None,
 ) -> dict:
-    """Run a single processing step.
-
-    Args:
-        step_num: Step number (1-7)
-        task_id: Task ID
-        output_dir: Output directory
-        step_data: Step-specific data (url, source, etc.)
-        log_cb: Logging callback
-        progress_cb: Progress callback
-
-    Returns:
-        dict with step outputs
-    """
+    """Run a step-by-step pipeline target, auto-filling missing prerequisites."""
     _log = _make_log(log_cb)
+    state = load_step_state(output_dir)
+    state["task_id"] = task_id
+    state["source"] = step_data.get("source") or state.get("source")
+    state["options"] = _step_options(step_data, state)
 
     step_names = {
-        1: "Download Video",
-        2: "Extract Audio",
-        3: "Transcribe",
-        4: "Cover Subtitle",
-        5: "Generate TTS",
-        6: "Mix Audio",
-        7: "Burn Subtitle",
+        1: "Prepare Source",
+        2: "Transcribe Audio",
+        3: "Translate Subtitle",
+        4: "Cover Original Subtitle",
+        5: "Export Files",
+        6: "Burn Subtitle",
+        7: "Generate Dub",
     }
-    step_name = step_names.get(step_num, f"Step {step_num}")
 
-    def _progress(progress: float, message: str):
+    def _progress(current_step: int, progress: float, message: str):
         if progress_cb:
-            progress_cb(step_num, progress, message)
+            progress_cb(current_step, progress, message)
 
-    _log(f"Starting step {step_num}: {step_name}")
-    _progress(0, f"{step_name} starting...")
+    if not state.get("source"):
+        raise ValueError("source is required for step-by-step processing")
+
+    if step_data.get("srt_content") and state.get("srt_path"):
+        Path(state["srt_path"]).write_text(step_data["srt_content"], encoding="utf-8")
+        parsed = parse_srt(Path(state["srt_path"]))
+        if parsed:
+            state["segments_vi"] = parsed
+            save_step_state(output_dir, state)
 
     try:
-        # Step 1: Download Video
-        if step_num == 1:
-            url = step_data.get("url", "")
-            if not url:
-                raise ValueError("URL required for step 1")
+        for current_step in range(1, step_num + 1):
+            force_run = current_step == step_num
+            options = state.get("options") or {}
+            _log(f"Starting step {current_step}: {step_names.get(current_step, current_step)}")
 
-            _progress(10, "Downloading video...")
-            result = step1_prepare(url, log_cb)
-            _progress(100, "Download complete")
-            return {
-                "video_path": result.get("raw_video"),
-                "audio_path": result.get("raw_audio"),
-                "title": result.get("title"),
-                "out_dir": result.get("out_dir"),
-            }
+            if current_step == 1:
+                raw_video = state.get("raw_video")
+                raw_audio = state.get("raw_audio")
+                if force_run or not raw_video or not raw_audio or not Path(raw_audio).exists():
+                    _clear_downstream_state(state, 1)
+                    _progress(1, 10, "Preparing source...")
+                    result = step1_prepare(state["source"], log_cb)
+                    state.update(result)
+                    _ensure_completed_step(state, 1)
+                    save_step_state(output_dir, state)
+                _progress(1, 100, "Step 1 completed")
 
-        # Step 2: Extract Audio (already done in step 1)
-        elif step_num == 2:
-            _progress(50, "Audio already extracted")
-            _progress(100, "Step 2 complete")
-            return {"status": "skipped", "message": "Audio extracted in step 1"}
+            elif current_step == 2:
+                if not state.get("raw_audio"):
+                    raise ValueError("raw_audio missing after step 1")
+                if force_run or not state.get("segments"):
+                    _clear_downstream_state(state, 2)
+                    _progress(2, 15, "Transcribing audio...")
+                    state["segments"] = step2_transcribe(state["raw_audio"], log_cb)
+                    _ensure_completed_step(state, 2)
+                    save_step_state(output_dir, state)
+                _progress(2, 100, "Step 2 completed")
 
-        # Step 3: Transcribe
-        elif step_num == 3:
-            audio_path = step_data.get("audio_path", "")
-            if not audio_path:
-                raise ValueError("audio_path required for step 3")
+            elif current_step == 3:
+                if not state.get("segments"):
+                    raise ValueError("segments missing after step 2")
+                if force_run or not state.get("segments_vi"):
+                    _clear_downstream_state(state, 3)
+                    _progress(3, 20, "Translating subtitle...")
+                    state["segments_vi"] = step3_translate(
+                        state["segments"],
+                        options.get("subtitle_timing_scale", 1.0),
+                        options.get("subtitle_offset_sec", 0.0),
+                        options.get("video_speed", 1.0),
+                        log_cb,
+                    )
+                _write_step3_srt(state, options.get("srt_max_chars_per_line", 45))
+                _ensure_completed_step(state, 3)
+                save_step_state(output_dir, state)
+                _progress(3, 100, "Step 3 completed")
 
-            _progress(10, "Transcribing audio...")
-            result = step2_transcribe(audio_path, log_cb)
-            _progress(100, "Transcription complete")
-            return {"segments": result.get("segments"), "srt_path": result.get("srt_path")}
+            elif current_step == 4:
+                segs_vi = _load_srt_segments_from_state(state)
+                if not state.get("raw_video") or not state.get("out_dir"):
+                    raise ValueError("step 1 output missing")
+                if force_run or not state.get("final_video"):
+                    _clear_downstream_state(state, 4)
+                    _progress(4, 20, "Covering original subtitle...")
+                    result = step4_cover(
+                        state["raw_video"],
+                        segs_vi,
+                        state["out_dir"],
+                        options.get("cover_mode", "blur"),
+                        blur_padding_px=options.get("blur_padding_px", 12),
+                        cover_offset_px=options.get("cover_offset_px", 0),
+                        blur_power=options.get("cover_strength", 15),
+                        video_speed=options.get("video_speed", 1.0),
+                        log_cb=log_cb,
+                    )
+                    state["final_video"] = result.get("final_video")
+                    state["cover_meta"] = result.get("cover_meta") or {}
+                    _ensure_completed_step(state, 4)
+                    save_step_state(output_dir, state)
+                _progress(4, 100, "Step 4 completed")
 
-        # Add other steps as needed...
-        else:
-            raise ValueError(f"Step {step_num} not implemented yet")
+            elif current_step == 5:
+                segs_vi = _load_srt_segments_from_state(state)
+                if not state.get("out_dir") or not state.get("raw_video"):
+                    raise ValueError("step 1 output missing")
+                _progress(5, 25, "Exporting files...")
+                state["srt_path"] = step5_export(
+                    segs_vi,
+                    state["out_dir"],
+                    state.get("title") or "Untitled",
+                    state.get("cover_meta") or {},
+                    state["raw_video"],
+                    srt_max_chars_per_line=options.get("srt_max_chars_per_line", 45),
+                    subtitle_font_scale=options.get("subtitle_font_scale", 1.0),
+                    subtitle_font_size=options.get("subtitle_font_size", 0),
+                    subtitle_margin_px=options.get("subtitle_margin_px", 0),
+                    blur_padding_px=options.get("blur_padding_px", 12),
+                    blur_power=options.get("cover_strength", 15),
+                    cover_offset_px=options.get("cover_offset_px", 0),
+                    subtitle_offset_sec=options.get("subtitle_offset_sec", 0.0),
+                    subtitle_timing_scale=options.get("subtitle_timing_scale", 1.0),
+                    video_speed=options.get("video_speed", 1.0),
+                    cover_mode=options.get("cover_mode", "blur"),
+                    log_cb=log_cb,
+                )
+                _ensure_completed_step(state, 5)
+                save_step_state(output_dir, state)
+                _progress(5, 100, "Step 5 completed")
 
+            elif current_step == 6:
+                if not options.get("burn_subtitle", True):
+                    _progress(6, 100, "Burn subtitle disabled, skipped")
+                    continue
+                if not state.get("final_video") or not state.get("srt_path"):
+                    raise ValueError("step 4/5 output missing")
+                _progress(6, 30, "Burning subtitle into video...")
+                state["burned_video"] = step6_burn(
+                    state["final_video"],
+                    state["srt_path"],
+                    state.get("cover_meta") or {},
+                    state["out_dir"],
+                    subtitle_font_scale=options.get("subtitle_font_scale", 1.0),
+                    subtitle_font_size=options.get("subtitle_font_size", 0),
+                    subtitle_margin_px=options.get("subtitle_margin_px", 0),
+                    log_cb=log_cb,
+                )
+                _ensure_completed_step(state, 6)
+                save_step_state(output_dir, state)
+                _progress(6, 100, "Step 6 completed")
+
+            elif current_step == 7:
+                segs_vi = _load_srt_segments_from_state(state)
+                if not segs_vi:
+                    raise ValueError("subtitle data missing before dubbing")
+                video_source = state.get("burned_video") or state.get("final_video") or state.get("raw_video")
+                _progress(7, 30, "Generating dub...")
+                dubbed = step7_dub(
+                    video_source,
+                    segs_vi,
+                    state["out_dir"],
+                    dub_mode=options.get("dub_mode", "preset"),
+                    dub_backend_mode=options.get("dub_backend_mode", "turbo"),
+                    dub_remote_api_base=options.get("dub_remote_api_base", "http://localhost:23333/v1"),
+                    dub_preset_voice=options.get("dub_preset_voice", ""),
+                    dub_ref_audio=options.get("dub_ref_audio", ""),
+                    dub_ref_text=options.get("dub_ref_text", ""),
+                    dub_voice_volume=options.get("dub_voice_volume", 1.35),
+                    dub_source_volume=options.get("dub_source_volume", 0.18),
+                    dub_mix_mode=options.get("dub_mix_mode", "nen_nho"),
+                    output_video_name="video_sub_viet_long_tieng.mp4" if options.get("burn_subtitle", True) else "video_long_tieng.mp4",
+                    log_cb=log_cb,
+                )
+                state["dub_track"] = str(dubbed["dub_track"])
+                state["dub_video"] = str(dubbed["dub_video"])
+                _ensure_completed_step(state, 7)
+                save_step_state(output_dir, state)
+                _progress(7, 100, "Step 7 completed")
+
+            else:
+                raise ValueError(f"Unsupported step: {current_step}")
+
+        return _collect_step_outputs(state, step_num)
     except Exception as e:
         _log(f"Step {step_num} failed: {e}")
         raise

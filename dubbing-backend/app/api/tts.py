@@ -2,25 +2,110 @@
 import logging
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
-from ..models.schemas import TTSTestRequest, TTSTestResponse
+from pydantic import BaseModel
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/test", response_model=TTSTestResponse)
-async def test_tts(request: TTSTestRequest):
-    """Test TTS voice with sample text."""
+class TTSStatusRequest(BaseModel):
+    engine_mode: str = "turbo"
+    backbone_repo: str = ""
+    backbone_device: str = ""
+    remote_api_base: str = "http://localhost:23333/v1"
+
+
+class TTSTestRequest(BaseModel):
+    text: str
+    mode: str = "preset"
+    preset_voice: str = ""
+    ref_audio: str = ""
+    ref_text: str = ""
+    engine_mode: str = "turbo"
+    backbone_repo: str = ""
+    backbone_device: str = ""
+    remote_api_base: str = "http://localhost:23333/v1"
+
+
+@router.post("/status")
+async def check_tts_status(request: TTSStatusRequest):
+    """Check if VieNeu-TTS is available."""
     try:
-        # Import here to avoid circular dependency
         import sys
         backend_dir = Path(__file__).parent.parent.parent.parent
         sys.path.insert(0, str(backend_dir))
 
-        from src.modules.tts.vieneu_engine import synthesize_speech
+        from src.modules.tts import is_vieneu_available, get_vieneu_error
+
+        available = is_vieneu_available(
+            engine_mode=request.engine_mode,
+            backbone_repo=request.backbone_repo,
+            backbone_device=request.backbone_device,
+            remote_api_base=request.remote_api_base,
+        )
+
+        error = ""
+        if not available:
+            error = get_vieneu_error(
+                engine_mode=request.engine_mode,
+                backbone_repo=request.backbone_repo,
+                backbone_device=request.backbone_device,
+                remote_api_base=request.remote_api_base,
+            )
+
+        return {
+            "available": available,
+            "error": error,
+        }
+    except Exception as e:
+        logger.error(f"Failed to check TTS status: {e}")
+        return {
+            "available": False,
+            "error": str(e),
+        }
+
+
+@router.get("/voices")
+async def list_voices(
+    engine_mode: str = "turbo",
+    backbone_repo: str = "",
+    backbone_device: str = "",
+    remote_api_base: str = "http://localhost:23333/v1",
+):
+    """List available preset voices."""
+    try:
+        import sys
+        backend_dir = Path(__file__).parent.parent.parent.parent
+        sys.path.insert(0, str(backend_dir))
+
+        from src.modules.tts import list_preset_voices
+
+        voices = list_preset_voices(
+            engine_mode=engine_mode,
+            backbone_repo=backbone_repo,
+            backbone_device=backbone_device,
+            remote_api_base=remote_api_base,
+        )
+
+        return {"voices": voices}
+    except Exception as e:
+        logger.error(f"Failed to list voices: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test")
+async def test_tts(request: TTSTestRequest):
+    """Test TTS with sample text."""
+    try:
+        import sys
+        backend_dir = Path(__file__).parent.parent.parent.parent
+        sys.path.insert(0, str(backend_dir))
+
+        from src.modules.tts import synthesize_speech
+        from src.modules.video_processing.ffmpeg_wrapper import probe_duration
 
         # Generate unique filename
         audio_id = str(uuid.uuid4())
@@ -29,19 +114,24 @@ async def test_tts(request: TTSTestRequest):
         # Synthesize speech
         synthesize_speech(
             text=request.text,
-            output_path=str(audio_path),
-            voice=request.voice,
+            out_path=audio_path,
+            mode=request.mode,
+            preset_voice=request.preset_voice,
+            ref_audio=request.ref_audio,
+            ref_text=request.ref_text,
+            engine_mode=request.engine_mode,
+            backbone_repo=request.backbone_repo,
+            backbone_device=request.backbone_device,
+            remote_api_base=request.remote_api_base,
         )
 
         # Get duration
-        from src.modules.video_processing.ffmpeg_wrapper import probe_duration
-        duration = probe_duration(str(audio_path))
+        duration = probe_duration(audio_path)
 
-        return TTSTestResponse(
-            audio_url=f"/api/tts/audio/{audio_id}",
-            duration=duration,
-        )
-
+        return {
+            "audio_url": f"/api/tts/audio/{audio_id}",
+            "duration": duration,
+        }
     except Exception as e:
         logger.error(f"Failed to test TTS: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -62,20 +152,30 @@ async def get_audio(audio_id: str):
     )
 
 
-@router.get("/voices")
-async def list_voices():
-    """List available TTS voices."""
+@router.post("/upload-ref-audio")
+async def upload_ref_audio(file: UploadFile = File(...)):
+    """Upload reference audio file for voice cloning."""
     try:
-        import sys
-        from pathlib import Path
-        backend_dir = Path(__file__).parent.parent.parent.parent
-        sys.path.insert(0, str(backend_dir))
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith("audio/"):
+            raise HTTPException(status_code=400, detail="File must be an audio file")
 
-        from src.modules.tts.vieneu_engine import list_preset_voices
+        # Generate unique filename
+        file_id = str(uuid.uuid4())
+        file_ext = Path(file.filename).suffix if file.filename else ".wav"
+        audio_path = settings.TEMP_DIR / f"ref_audio_{file_id}{file_ext}"
 
-        voices = list_preset_voices()
-        return {"voices": voices}
+        # Save uploaded file
+        content = await file.read()
+        audio_path.write_bytes(content)
 
+        logger.info(f"Uploaded reference audio: {audio_path}")
+
+        return {
+            "file_path": str(audio_path),
+            "file_id": file_id,
+            "filename": file.filename,
+        }
     except Exception as e:
-        logger.error(f"Failed to list voices: {e}")
+        logger.error(f"Failed to upload reference audio: {e}")
         raise HTTPException(status_code=500, detail=str(e))

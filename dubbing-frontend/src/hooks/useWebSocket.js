@@ -9,8 +9,8 @@ const useWebSocket = () => {
   const { taskId, setProgress, addLog, setStatus, setOutputs } = useAppStore()
 
   useEffect(() => {
-    // Create socket connection
-    const socket = io('http://localhost:8000', {
+    // Use same-origin WebSocket so dev proxy and deployed environments stay aligned.
+    const socket = io({
       path: '/ws/socket.io',
       transports: ['websocket', 'polling'],
     })

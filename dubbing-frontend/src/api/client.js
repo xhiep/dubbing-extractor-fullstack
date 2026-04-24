@@ -1,47 +1,28 @@
 import axios from 'axios'
 
-const api = axios.create({
+export const apiClient = axios.create({
   baseURL: '/api',
+  timeout: 300000, // 5 minutes for preview render
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
-
-// Response interceptor
-api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    const message = error.response?.data?.detail || error.message || 'An error occurred'
-    return Promise.reject(new Error(message))
-  }
-)
-
-// API methods
 export const processAPI = {
-  start: (data) => api.post('/process/', data),
-  runStep: (stepNum, data) => api.post(`/process/step/${stepNum}`, data),
-  getStatus: (taskId) => api.get(`/process/status/${taskId}`),
-  cancel: (taskId) => api.post(`/process/cancel/${taskId}`),
+  start: (options) => apiClient.post('/process/', options).then(res => res.data),
+  cancel: (taskId) => apiClient.post(`/process/cancel/${taskId}`).then(res => res.data),
+  status: (taskId) => apiClient.get(`/process/status/${taskId}`).then(res => res.data),
+  runStep: (stepNum, data) => apiClient.post(`/process/step/${stepNum}`, data).then(res => res.data),
+  getStepSrt: (taskId) => apiClient.get(`/process/step-srt/${taskId}`).then(res => res.data),
+  saveStepSrt: (taskId, content) => apiClient.post(`/process/step-srt/${taskId}`, { content }).then(res => res.data),
 }
 
 export const previewAPI = {
-  getInfo: (source) => api.post('/preview/', { source }),
+  getInfo: (source) => apiClient.post('/preview', { source }).then(res => res.data),
 }
 
 export const ttsAPI = {
-  checkStatus: (config) => api.post('/tts/status', config),
-  listVoices: (params) => api.get('/tts/voices', { params }),
-  test: (data) => api.post('/tts/test', data),
+  checkStatus: (payload) => apiClient.post('/tts/status', payload).then(res => res.data),
+  listVoices: (params) => apiClient.get('/tts/voices', { params }).then(res => res.data),
+  test: (payload) => apiClient.post('/tts/test', payload).then(res => res.data),
 }
-
-export default api

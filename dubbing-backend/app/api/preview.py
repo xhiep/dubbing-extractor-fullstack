@@ -1,6 +1,8 @@
 """Video preview endpoints."""
 import logging
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+import httpx
 from ..models.schemas import PreviewRequest, PreviewResponse
 
 logger = logging.getLogger(__name__)
@@ -39,4 +41,21 @@ async def get_preview(request: PreviewRequest):
 
     except Exception as e:
         logger.error(f"Failed to get preview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/thumbnail")
+async def proxy_thumbnail(url: str):
+    """Proxy thumbnail image to avoid CORS issues."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            response.raise_for_status()
+
+            return StreamingResponse(
+                iter([response.content]),
+                media_type=response.headers.get("content-type", "image/jpeg")
+            )
+    except Exception as e:
+        logger.error(f"Failed to proxy thumbnail: {e}")
         raise HTTPException(status_code=500, detail=str(e))

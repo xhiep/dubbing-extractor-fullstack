@@ -1,5 +1,6 @@
 """yt-dlp wrapper for downloading videos from various platforms."""
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -13,6 +14,13 @@ from .platform_detector import detect_platform
 from ..video_processing.ffmpeg_wrapper import LOCAL_FFMPEG
 
 HERE = Path(__file__).parent.parent.parent.parent
+
+# Add local ffmpeg to PATH if it exists
+if LOCAL_FFMPEG.exists():
+    ffmpeg_dir = str(LOCAL_FFMPEG.parent)
+    if ffmpeg_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+        logger.info(f"Added local ffmpeg to PATH: {ffmpeg_dir}")
 
 
 def strip_ansi(text: str) -> str:
@@ -193,6 +201,8 @@ def fetch_preview_info(source: str) -> dict:
         "uploader": info.get("uploader") or info.get("channel") or "",
         "view_count": info.get("view_count") or 0,
         "webpage_url": info.get("webpage_url") or source,
+        "width": info.get("width", 0),
+        "height": info.get("height", 0),
     }
 
 def _resolve_douyin_cookies(log_cb=None) -> dict:
@@ -272,7 +282,9 @@ def _build_extra_ydl_opts(platform: str, log_cb=None) -> dict:
 
 # ─── FFMPEG HELPERS ───────────────────────────────────────────────────────────
 
-def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] = None) -> Tuple[Path, Path, str]:
+def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] = None,
+             download_range_start: Optional[float] = None,
+             download_range_end: Optional[float] = None) -> Tuple[Path, Path, str]:
     """Download video and audio from URL using yt-dlp.
 
     Supports multiple platforms (YouTube, Bilibili, Douyin) with platform-specific
@@ -282,6 +294,8 @@ def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] =
         url: Video URL (YouTube, Bilibili, Douyin, etc.)
         work_dir: Working directory for downloaded files
         log_cb: Optional callback function for logging progress
+        download_range_start: Optional start time in seconds for partial download
+        download_range_end: Optional end time in seconds for partial download
 
     Returns:
         Tuple containing:
@@ -308,6 +322,7 @@ def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] =
     platform   = detect_platform(url)
     headers    = _build_ydl_headers(platform)
     extra_opts = _build_extra_ydl_opts(platform, log_cb)
+    # yt-dlp expects ffmpeg_location to be the directory containing ffmpeg.exe
     ff_loc     = str(LOCAL_FFMPEG.parent) if LOCAL_FFMPEG.exists() else None
 
     platform_label = {"douyin": "Douyin", "bilibili": "Bilibili",
@@ -351,6 +366,12 @@ def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] =
     video_path = work_dir / "raw_video.mp4"
     _log("->  Tai VIDEO chat luong cao nhat...")
 
+    # Build download_ranges if specified
+    download_ranges = None
+    if download_range_start is not None and download_range_end is not None:
+        download_ranges = f"*{download_range_start}-{download_range_end}"
+        _log(f"   Tai doan {download_range_start}s - {download_range_end}s")
+
     def _hook(d):
         if d["status"] == "downloading":
             done  = d.get("downloaded_bytes", 0)
@@ -373,7 +394,7 @@ def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] =
                     pass
 
     try:
-        with yt_dlp.YoutubeDL({
+        ydl_opts = {
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "outtmpl": str(video_path),
             "merge_output_format": "mp4",
@@ -383,7 +404,11 @@ def download(url: str, work_dir: Path, log_cb: Optional[Callable[[str], None]] =
             "retries": 5,
             "ffmpeg_location": ff_loc,
             **extra_opts,
-        }) as ydl:
+        }
+        if download_ranges:
+            ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [(download_range_start, download_range_end)])
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     except Exception as exc:
         clean = strip_ansi(str(exc))

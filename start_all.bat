@@ -1,58 +1,62 @@
 @echo off
-REM Start both Backend and Frontend for local development
-REM No Docker required
+setlocal
+
+set "ROOT=%~dp0"
+set "BACKEND_DIR=%ROOT%dubbing-backend"
+set "FRONTEND_DIR=%ROOT%dubbing-frontend"
+set "BACKEND_PORT=8000"
+set "FRONTEND_PORT=5173"
+set "BACKEND_URL=http://127.0.0.1:%BACKEND_PORT%"
 
 echo ========================================
-echo Dubbing Extractor - Full Stack Startup
+echo Dubbing Extractor - Start All
 echo ========================================
 echo.
 
-REM Check if backend venv exists
-if not exist "dubbing-backend\venv\Scripts\activate.bat" (
-    echo ERROR: Backend virtual environment not found!
-    echo.
-    echo Please setup backend first:
-    echo   cd dubbing-backend
-    echo   python -m venv venv
-    echo   venv\Scripts\activate
-    echo   pip install -r requirements-minimal.txt
-    echo.
-    pause
+if not exist "%BACKEND_DIR%\venv\Scripts\python.exe" (
+    echo ERROR: Backend venv not found at "%BACKEND_DIR%\venv"
+    echo Run setup_full.bat first.
     exit /b 1
 )
 
-REM Check if frontend node_modules exists
-if not exist "dubbing-frontend\node_modules" (
-    echo ERROR: Frontend dependencies not installed!
-    echo.
-    echo Please setup frontend first:
-    echo   cd dubbing-frontend
-    echo   npm install
-    echo.
-    pause
+if not exist "%FRONTEND_DIR%\node_modules" (
+    echo ERROR: Frontend dependencies not found at "%FRONTEND_DIR%\node_modules"
+    echo Run setup_full.bat first.
     exit /b 1
 )
 
-echo [1/2] Starting Backend (FastAPI)...
-start "Dubbing Backend" cmd /k "cd dubbing-backend && venv\Scripts\activate && uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000 --reload"
+echo Stopping old frontend/backend processes first...
+call "%ROOT%stop_all.bat" >nul 2>&1
 
-REM Wait 3 seconds for backend to start
-timeout /t 3 /nobreak >nul
+echo Starting backend on port %BACKEND_PORT%...
+start "Dubbing Backend" cmd /k "cd /d "%BACKEND_DIR%" && call venv\Scripts\activate.bat && python -m uvicorn app.main:asgi_app --host 127.0.0.1 --port %BACKEND_PORT%"
 
-echo [2/2] Starting Frontend (React + Vite)...
-start "Dubbing Frontend" cmd /k "cd dubbing-frontend && npm run dev"
+echo Waiting for backend health check...
+set "BACKEND_OK="
+for /l %%i in (1,1,20) do (
+    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing '%BACKEND_URL%/health' -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+    if not errorlevel 1 (
+        set "BACKEND_OK=1"
+        goto :backend_ready
+    )
+    timeout /t 1 /nobreak >nul
+)
+
+:backend_ready
+if not defined BACKEND_OK (
+    echo ERROR: Backend did not become healthy on %BACKEND_URL%
+    exit /b 1
+)
+
+echo Starting frontend on port %FRONTEND_PORT%...
+start "Dubbing Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && set VITE_PROXY_TARGET=%BACKEND_URL% && npm.cmd run dev -- --host 127.0.0.1 --port %FRONTEND_PORT%"
 
 echo.
 echo ========================================
-echo Services Started!
+echo Services started
 echo ========================================
-echo Backend:  http://localhost:8000
-echo Frontend: http://localhost:5173
-echo API Docs: http://localhost:8000/docs
-echo.
-echo Two terminal windows opened:
-echo - Dubbing Backend (FastAPI)
-echo - Dubbing Frontend (React)
-echo.
-echo Press Ctrl+C in each window to stop
+echo Backend:  %BACKEND_URL%
+echo Frontend: http://127.0.0.1:%FRONTEND_PORT%
+echo API Docs: %BACKEND_URL%/docs
 echo ========================================
+exit /b 0

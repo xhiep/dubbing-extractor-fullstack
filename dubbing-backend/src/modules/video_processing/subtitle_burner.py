@@ -1,14 +1,62 @@
 ﻿"""Burn subtitles into video."""
 import logging
+import re
 import subprocess
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict
 
 logger = logging.getLogger(__name__)
 
 from .ffmpeg_wrapper import ffmpeg_cmd, get_dims
 from .video_encoder import _has_nvenc, _build_enc_args, _run_ff
 from ...utils.file_utils import safe_path
+
+def parse_srt_for_cover(srt_path: Path) -> List[Dict]:
+    """Parse SRT file and return subtitle events with timing.
+
+    Args:
+        srt_path: Path to SRT file
+
+    Returns:
+        List of subtitle events with start_time, end_time, text, top_y, bottom_y
+    """
+    events = []
+
+    try:
+        with open(srt_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Parse SRT format
+        # Format: index\nstart --> end\ntext\n\n
+        pattern = r'(\d+)\s*\n(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})\s*\n(.*?)(?=\n\n|\Z)'
+        matches = re.findall(pattern, content, re.DOTALL)
+
+        for match in matches:
+            index, start_str, end_str, text = match
+
+            # Convert timestamp to seconds
+            def time_to_seconds(time_str):
+                h, m, s = time_str.split(':')
+                s, ms = s.split(',')
+                return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+            start_time = time_to_seconds(start_str)
+            end_time = time_to_seconds(end_str)
+
+            # Default subtitle position (bottom 20% of video)
+            # These will be calculated by render_clean_video based on video height
+            events.append({
+                'start': start_time,
+                'end': end_time,
+                'text': text.strip(),
+                'top_y': 0,      # Placeholder, will be calculated
+                'bottom_y': 100, # Placeholder, will be calculated
+            })
+
+    except Exception as e:
+        logger.error(f"Failed to parse SRT: {e}")
+
+    return events
 
 def _check_libass() -> bool:
     """Check if ffmpeg has libass support for subtitle rendering."""

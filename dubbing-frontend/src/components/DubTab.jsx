@@ -6,21 +6,15 @@ import { ttsAPI } from '../api/client'
 const DubTab = () => {
   const { processingOptions, updateProcessingOptions } = useAppStore()
 
-  // TTS Status
   const [ttsStatus, setTtsStatus] = useState({ available: null, error: '' })
   const [checkingStatus, setCheckingStatus] = useState(false)
-
-  // Voice lists
   const [voices, setVoices] = useState([])
   const [loadingVoices, setLoadingVoices] = useState(false)
-
-  // TTS Preview
   const [previewText, setPreviewText] = useState('Xin chào, đây là bài test giọng đọc tiếng Việt.')
   const [previewAudio, setPreviewAudio] = useState(null)
   const [testingVoice, setTestingVoice] = useState(false)
   const [audioPlayer, setAudioPlayer] = useState(null)
 
-  // Check TTS status on mount
   useEffect(() => {
     checkTTSStatus()
   }, [processingOptions.dub_backend_mode, processingOptions.dub_remote_api_base])
@@ -36,11 +30,9 @@ const DubTab = () => {
       })
       setTtsStatus(result)
 
-      // Auto-switch to CPU mode if GPU mode fails due to CUDA
       if (!result.available && result.error && result.error.includes('CUDA')) {
         const currentMode = processingOptions.dub_backend_mode || 'turbo'
         if (currentMode === 'turbo_gpu' || currentMode === 'fast') {
-          console.log('GPU not available, switching to turbo (CPU) mode')
           updateProcessingOptions({ dub_backend_mode: 'turbo' })
         }
       }
@@ -90,7 +82,6 @@ const DubTab = () => {
 
       setPreviewAudio(result.audio_url)
 
-      // Auto play
       setTimeout(() => {
         if (audioPlayer) {
           audioPlayer.play()
@@ -119,7 +110,6 @@ const DubTab = () => {
       const file = e.target.files[0]
       if (file) {
         try {
-          // Upload file to backend
           const formData = new FormData()
           formData.append('file', file)
 
@@ -133,8 +123,6 @@ const DubTab = () => {
           }
 
           const data = await response.json()
-
-          // Update with server file path
           updateProcessingOptions({ dub_ref_audio: data.file_path })
           toast.success(`Đã upload: ${file.name}`, {
             duration: 3000,
@@ -153,7 +141,6 @@ const DubTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* TTS Status Card */}
       <div className="card">
         <h2 className="text-headline font-sf-display text-apple-ink mb-4">Trạng Thái VieNeu-TTS</h2>
 
@@ -172,15 +159,15 @@ const DubTab = () => {
                 VieNeu-TTS không khả dụng
               </div>
               {ttsStatus.error && (
-                <div className="text-footnote text-apple-gray-secondary bg-apple-gray rounded-apple-md p-3">
+                <div className="surface-subtle text-footnote text-apple-gray-secondary rounded-apple-md p-3">
                   {ttsStatus.error}
                   {ttsStatus.error.includes('CUDA') && (
-                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 rounded text-yellow-800">
-                      <strong>💡 Giải pháp:</strong>
+                    <div className="notice-warning mt-2 p-3 rounded-apple-md text-yellow-800">
+                      <strong>Giải pháp:</strong>
                       <ul className="list-disc list-inside mt-1 text-xs">
-                        <li>Đổi sang mode "turbo (CPU nhanh)" bên dưới</li>
-                        <li>Hoặc cài PyTorch có CUDA: <code>pip install torch --index-url https://download.pytorch.org/whl/cu118</code></li>
-                        <li>Hoặc dùng mode "remote" để kết nối server TTS khác</li>
+                        <li>Đổi sang mode &quot;turbo (CPU nhanh)&quot; bên dưới.</li>
+                        <li>Cài PyTorch có CUDA nếu máy có GPU NVIDIA phù hợp.</li>
+                        <li>Dùng mode &quot;remote&quot; để kết nối server TTS khác.</li>
                       </ul>
                     </div>
                   )}
@@ -193,7 +180,6 @@ const DubTab = () => {
         </div>
       </div>
 
-      {/* Enable Dubbing */}
       <div className="card">
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -205,7 +191,7 @@ const DubTab = () => {
           <div className="flex-1">
             <div className="text-body font-semibold text-apple-ink">Bật Lồng Tiếng Tiếng Việt</div>
             <div className="text-control text-apple-gray-secondary mt-1">
-              Tự động tạo giọng đọc tiếng Việt và trộn vào video
+              Tự động tạo giọng đọc tiếng Việt và trộn vào video.
             </div>
           </div>
         </label>
@@ -213,7 +199,6 @@ const DubTab = () => {
 
       {processingOptions.enable_dub && (
         <>
-          {/* TTS Mode */}
           <div className="card">
             <h2 className="text-headline font-sf-display text-apple-ink mb-4">Chế Độ Giọng</h2>
 
@@ -244,7 +229,6 @@ const DubTab = () => {
             </div>
           </div>
 
-          {/* Backend Mode */}
           <div className="card">
             <h2 className="text-headline font-sf-display text-apple-ink mb-4">Backend VieNeu</h2>
 
@@ -268,7 +252,6 @@ const DubTab = () => {
             </div>
           </div>
 
-          {/* Remote API (only show if remote mode) */}
           {processingOptions.dub_backend_mode === 'remote' && (
             <div className="card">
               <h2 className="text-headline font-sf-display text-apple-ink mb-4">Remote API URL</h2>
@@ -283,7 +266,6 @@ const DubTab = () => {
             </div>
           )}
 
-          {/* Preset Voice Selection */}
           {processingOptions.dub_mode === 'preset' && (
             <div className="card">
               <h2 className="text-headline font-sf-display text-apple-ink mb-4">Giọng Mẫu</h2>
@@ -310,7 +292,7 @@ const DubTab = () => {
                   <button
                     onClick={loadVoices}
                     disabled={loadingVoices}
-                    className="btn bg-apple-gray hover:bg-apple-border-soft text-apple-ink rounded-apple-md px-6"
+                    className="btn btn-tertiary rounded-apple-md px-6"
                   >
                     {loadingVoices ? 'Đang Tải...' : 'Tải Danh Sách Giọng'}
                   </button>
@@ -319,7 +301,6 @@ const DubTab = () => {
             </div>
           )}
 
-          {/* Clone Voice Settings */}
           {processingOptions.dub_mode === 'clone' && (
             <div className="card">
               <h2 className="text-headline font-sf-display text-apple-ink mb-4">Clone Giọng</h2>
@@ -339,7 +320,7 @@ const DubTab = () => {
                     />
                     <button
                       onClick={handleFileSelect}
-                      className="btn bg-apple-gray hover:bg-apple-border-soft text-apple-ink rounded-apple-md px-6"
+                      className="btn btn-tertiary rounded-apple-md px-6"
                     >
                       Chọn File
                     </button>
@@ -362,7 +343,6 @@ const DubTab = () => {
             </div>
           )}
 
-          {/* Audio Mixing */}
           <div className="card">
             <h2 className="text-headline font-sf-display text-apple-ink mb-4">Trộn Audio</h2>
 
@@ -419,7 +399,6 @@ const DubTab = () => {
             </div>
           </div>
 
-          {/* TTS Preview */}
           <div className="card">
             <h2 className="text-headline font-sf-display text-apple-ink mb-4">Nghe Thử Giọng</h2>
 
@@ -449,14 +428,14 @@ const DubTab = () => {
                 <button
                   onClick={stopPreview}
                   disabled={!previewAudio}
-                  className="btn bg-apple-gray hover:bg-apple-border-soft text-apple-ink rounded-apple-md"
+                  className="btn btn-tertiary rounded-apple-md"
                 >
                   Dừng Nghe Thử
                 </button>
               </div>
 
               {previewAudio && (
-                <div className="bg-apple-gray rounded-apple-md p-4">
+                <div className="surface-subtle rounded-apple-md p-4">
                   <audio
                     ref={setAudioPlayer}
                     controls
@@ -468,15 +447,14 @@ const DubTab = () => {
             </div>
           </div>
 
-          {/* Help Info */}
-          <div className="card bg-blue-50 border border-blue-200">
-            <h3 className="text-body font-semibold text-blue-900 mb-2">ℹ️ Hướng Dẫn Sử Dụng</h3>
+          <div className="card notice-info">
+            <h3 className="text-body font-semibold text-blue-900 mb-2">Hướng Dẫn Sử Dụng</h3>
             <ul className="text-control text-blue-800 space-y-1 list-disc list-inside">
-              <li>Giọng mẫu: dùng nhanh, không cần file mẫu</li>
-              <li>Clone giọng: nên dùng file 3-5 giây, 1 người nói rõ, ít nhạc nền, ít vang</li>
-              <li>Mode VieNeu: turbo=CPU GGUF, turbo_gpu=GPU, standard=CPU/GPU, fast=LMDeploy, remote=server API, xpu=Intel GPU</li>
-              <li>Thời gian xử lý: ~1-2 phút cho video 10 phút</li>
-              <li>Câu ngắn (5-15 từ) cho kết quả tốt nhất</li>
+              <li>Giọng mẫu: dùng nhanh, không cần file mẫu.</li>
+              <li>Clone giọng: nên dùng file 3-5 giây, 1 người nói rõ, ít nhạc nền, ít vang.</li>
+              <li>Mode VieNeu: turbo=CPU GGUF, turbo_gpu=GPU, standard=CPU/GPU, fast=LMDeploy, remote=server API, xpu=Intel GPU.</li>
+              <li>Thời gian xử lý: khoảng 1-2 phút cho video 10 phút.</li>
+              <li>Câu ngắn 5-15 từ cho kết quả tốt nhất.</li>
             </ul>
           </div>
         </>

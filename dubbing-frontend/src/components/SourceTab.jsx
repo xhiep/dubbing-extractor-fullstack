@@ -14,15 +14,11 @@ const SourceTab = () => {
     showPreview ? sourceInput : null
   )
 
-  // Save preview to store when it loads
   useEffect(() => {
     if (preview) {
       setPreview(preview)
     }
   }, [preview, setPreview])
-
-  // Debug logging
-  console.log('Preview state:', { showPreview, preview, isLoading, error, thumbnailError })
 
   const handleSourceChange = (e) => {
     const value = e.target.value
@@ -45,7 +41,6 @@ const SourceTab = () => {
 
   return (
     <div className="space-y-8">
-      {/* Source input */}
       <div className="card">
         <h2 className="text-utility font-sf-display text-apple-ink mb-6">Nguồn Video</h2>
 
@@ -67,7 +62,7 @@ const SourceTab = () => {
                   type="text"
                   value={sourceInput}
                   onChange={handleSourceChange}
-                  placeholder="https://youtube.com/watch?v=... hoặc C:\path\to\video.mp4"
+                  placeholder="https://youtube.com/watch?v=... hoặc C:\\path\\to\\video.mp4"
                   className="input pl-12 py-3"
                 />
               </div>
@@ -85,18 +80,16 @@ const SourceTab = () => {
             </div>
           </div>
 
-          {/* Debug: Show loading/error state */}
           {showPreview && isLoading && (
-            <div className="bg-blue-50 border border-blue-300 rounded-apple-xl p-5">
+            <div className="notice-info rounded-apple-xl p-5">
               <p className="text-blue-600 text-control font-medium">
-                🔄 Đang tải preview...
+                Đang tải preview...
               </p>
             </div>
           )}
 
-          {/* Preview info */}
           {showPreview && preview && (
-            <div className="bg-apple-gray rounded-apple-xl p-5 space-y-3 border border-apple-border-soft">
+            <div className="surface-subtle rounded-apple-xl p-5 space-y-3">
               <div className="flex items-start gap-5">
                 {preview.thumbnail && !thumbnailError ? (
                   <div className="relative w-40 h-24 rounded-apple-lg flex-shrink-0 bg-apple-black">
@@ -110,12 +103,10 @@ const SourceTab = () => {
                       alt={preview.title}
                       className={`w-full h-full object-cover rounded-apple-lg ${thumbnailLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
                       onError={() => {
-                        console.error('Thumbnail failed to load:', preview.thumbnail)
                         setThumbnailError(true)
                         setThumbnailLoading(false)
                       }}
                       onLoad={() => {
-                        console.log('Thumbnail loaded successfully')
                         setThumbnailLoading(false)
                       }}
                     />
@@ -140,21 +131,20 @@ const SourceTab = () => {
           )}
 
           {showPreview && error && (
-            <div className="bg-red-50 border border-red-300 rounded-apple-xl p-5">
+            <div className="notice-error rounded-apple-xl p-5">
               <p className="text-red-600 text-control font-medium">
-                ⚠️ {error.message}
+                {error.message}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Processing mode */}
       <div className="card">
         <h2 className="text-utility font-sf-display text-apple-ink mb-6">Chế Độ Xử Lý</h2>
 
         <div className="space-y-4">
-          <label className="flex items-start gap-4 p-5 bg-apple-gray rounded-apple-xl cursor-pointer hover:bg-apple-border-soft transition-all border border-apple-border-soft hover:border-apple-border-mid">
+          <label className="option-card flex items-start gap-4 p-5 rounded-apple-xl cursor-pointer transition-all">
             <input
               type="radio"
               name="mode"
@@ -166,12 +156,12 @@ const SourceTab = () => {
             <div className="flex-1">
               <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Monolithic (Tự động)</div>
               <div className="text-control text-apple-gray-secondary leading-relaxed">
-                Chạy toàn bộ pipeline một lần, không cần can thiệp
+                Chạy toàn bộ pipeline một lần, không cần can thiệp.
               </div>
             </div>
           </label>
 
-          <label className="flex items-start gap-4 p-5 bg-apple-gray rounded-apple-xl cursor-pointer hover:bg-apple-border-soft transition-all border border-apple-border-soft hover:border-apple-border-mid">
+          <label className="option-card flex items-start gap-4 p-5 rounded-apple-xl cursor-pointer transition-all">
             <input
               type="radio"
               name="mode"
@@ -183,7 +173,7 @@ const SourceTab = () => {
             <div className="flex-1">
               <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Step-by-Step (Thủ công)</div>
               <div className="text-control text-apple-gray-secondary leading-relaxed">
-                Chạy từng bước riêng, có thể edit SRT giữa chừng
+                Chạy từng bước riêng, có thể chỉnh SRT và tham số giữa chừng.
               </div>
             </div>
           </label>

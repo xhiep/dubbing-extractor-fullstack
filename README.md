@@ -2,17 +2,36 @@
 
 **Modern video dubbing and subtitle extraction tool with web interface.**
 
-## 🚀 Quick Start (No Docker)
+## 🚀 Quick Start
 
-### First Time Setup
+### Option 1: Full Setup (Recommended)
 ```powershell
-cd C:\Users\xhiep\Downloads\dubbing-extractor-fullstack
-setup.bat
+# Install everything (PyTorch, Whisper, yt-dlp)
+setup_full.bat
+
+# Copy FFmpeg binaries (REQUIRED)
+copy ..\dubbing-extractor\bin\ffmpeg\*.exe dubbing-backend\bin\ffmpeg\
+
+# Start services
+start_all.bat
 ```
 
-### Start Development
+### Option 2: Minimal Setup
 ```powershell
+# Install core dependencies only
+setup.bat
+
+# Copy FFmpeg binaries (REQUIRED)
+copy ..\dubbing-extractor\bin\ffmpeg\*.exe dubbing-backend\bin\ffmpeg\
+
+# Start services
 start_all.bat
+```
+
+### Check Environment
+```powershell
+# Verify all dependencies are installed
+check_env.bat
 ```
 
 **Access:**

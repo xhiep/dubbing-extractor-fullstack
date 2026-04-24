@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 import socketio
 
 from .core.config import settings
-from .api import process, preview, tts
+from .api import process, preview, tts, preview_render
 from .websocket import sio
 
 logger = logging.getLogger(__name__)
@@ -37,20 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Socket.IO
-socket_app = socketio.ASGIApp(
-    sio,
-    other_asgi_app=app,
-    socketio_path="/ws/socket.io",
-)
-
-# Include routers
+# Include routers BEFORE mounting static files
 app.include_router(process.router, prefix=f"{settings.API_V1_PREFIX}/process", tags=["process"])
 app.include_router(preview.router, prefix=f"{settings.API_V1_PREFIX}/preview", tags=["preview"])
+app.include_router(preview_render.router, prefix=f"{settings.API_V1_PREFIX}/preview-render", tags=["preview-render"])
 app.include_router(tts.router, prefix=f"{settings.API_V1_PREFIX}/tts", tags=["tts"])
-
-# Serve static files (output directory)
-app.mount("/output", StaticFiles(directory=str(settings.OUTPUT_DIR)), name="output")
 
 
 @app.get("/")
@@ -67,6 +58,17 @@ async def root():
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Serve static files (output directory) - MUST be last
+app.mount("/output", StaticFiles(directory=str(settings.OUTPUT_DIR)), name="output")
+
+# Mount Socket.IO AFTER all routes
+socket_app = socketio.ASGIApp(
+    sio,
+    other_asgi_app=app,
+    socketio_path="/ws/socket.io",
+)
 
 
 # Export the Socket.IO app for uvicorn

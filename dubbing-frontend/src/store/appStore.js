@@ -1,6 +1,11 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
-const useAppStore = create((set, get) => ({
+const useAppStore = create(
+  persist(
+    (set, get) => ({
+  theme: 'light',
+
   // Current task
   taskId: null,
   status: 'idle', // idle, queued, running, completed, failed
@@ -27,9 +32,14 @@ const useAppStore = create((set, get) => ({
     cover_mode: 'blur',
     cover_strength: 15,
     burn_subtitle: true,
+    srt_max_chars_per_line: 45,
     subtitle_font_scale: 1.0,
+    subtitle_font_size: 0,
+    subtitle_margin_px: 0,
     subtitle_timing_scale: 1.0,
     subtitle_offset_sec: 0.0,
+    blur_padding_px: 12,
+    cover_offset_px: 0,
     video_speed: 1.0,
     output_format: 'mp4',
 
@@ -47,6 +57,8 @@ const useAppStore = create((set, get) => ({
   },
 
   // Actions
+  setTheme: (theme) => set({ theme }),
+
   setTaskId: (taskId) => set({ taskId }),
 
   setStatus: (status) => set({ status }),
@@ -89,6 +101,15 @@ const useAppStore = create((set, get) => ({
     outputs: {},
     logs: [],
   }),
-}))
+}),
+    {
+      name: 'dubbing-app-storage',
+      partialize: (state) => ({
+        theme: state.theme,
+        processingOptions: state.processingOptions,
+      }),
+    }
+  )
+)
 
 export default useAppStore

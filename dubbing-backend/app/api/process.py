@@ -108,6 +108,73 @@ async def run_step(step_num: int, request: StepRequest, background_tasks: Backgr
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/step-srt/{task_id}")
+async def get_step_srt(task_id: str):
+    """Get current editable SRT content for a step-by-step task."""
+    try:
+        from src.modules.workflow import load_step_state
+
+        state = load_step_state(str(settings.OUTPUT_DIR / task_id))
+        srt_path = state.get("srt_path")
+        if not srt_path:
+            raise HTTPException(status_code=404, detail="SRT file not available yet")
+
+        resolved_path = Path(srt_path).resolve()
+        output_dir = settings.OUTPUT_DIR.resolve()
+        if not str(resolved_path).startswith(str(output_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail="SRT file not found")
+
+        return {
+            "task_id": task_id,
+            "srt_path": str(resolved_path),
+            "content": resolved_path.read_text(encoding="utf-8", errors="ignore"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get SRT for task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-srt/{task_id}")
+async def save_step_srt(task_id: str, request: dict):
+    """Save edited SRT content for a step-by-step task."""
+    try:
+        from src.modules.workflow import load_step_state, save_step_state
+        from src.modules.transcription.srt_generator import parse_srt
+
+        content = request.get("content", "")
+        state = load_step_state(str(settings.OUTPUT_DIR / task_id))
+        srt_path = state.get("srt_path")
+        if not srt_path:
+            raise HTTPException(status_code=404, detail="SRT file not available yet")
+
+        resolved_path = Path(srt_path).resolve()
+        output_dir = settings.OUTPUT_DIR.resolve()
+        if not str(resolved_path).startswith(str(output_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        resolved_path.write_text(content, encoding="utf-8")
+        parsed = parse_srt(resolved_path)
+        if parsed:
+            state["segments_vi"] = parsed
+        save_step_state(str(settings.OUTPUT_DIR / task_id), state)
+
+        return {
+            "task_id": task_id,
+            "srt_path": str(resolved_path),
+            "saved": True,
+            "segment_count": len(parsed),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save SRT for task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/status/{task_id}", response_model=StatusResponse)
 async def get_status(task_id: str):
     """Get task status."""

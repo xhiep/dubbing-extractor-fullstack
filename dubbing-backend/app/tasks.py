@@ -104,27 +104,9 @@ def process_video_task(self, source: str, options: dict, mode: str = "monolithic
 @celery_app.task(base=CallbackTask, bind=True)
 def run_step_task(self, step_num: int, task_id: str, step_data: dict):
     """Run a single processing step."""
-    from src.modules.workflow import (
-        step1_prepare,
-        step2_transcribe,
-        step3_translate,
-        step4_cover,
-        step5_export,
-        step6_burn,
-        step7_dub,
-    )
+    from src.modules.workflow import run_single_step
     import asyncio
-    from .websocket import emit_progress, emit_log, emit_completed
-
-    step_functions = {
-        1: step1_prepare,
-        2: step2_transcribe,
-        3: step3_translate,
-        4: step4_cover,
-        5: step5_export,
-        6: step6_burn,
-        7: step7_dub,
-    }
+    from .websocket import emit_progress, emit_log, emit_completed, emit_error
 
     output_dir = settings.OUTPUT_DIR / task_id
 
@@ -136,19 +118,26 @@ def run_step_task(self, step_num: int, task_id: str, step_data: dict):
         except Exception as e:
             logger.error(f"Failed to emit log: {e}")
 
-    try:
-        func = step_functions[step_num]
-        result = func(
-            output_dir=str(output_dir),
-            log_cb=log_callback,
-            **step_data,
-        )
-
-        # Emit progress
+    def progress_callback(step: int, progress: float, message: str):
         try:
-            asyncio.run(emit_progress(task_id, step_num, 100.0, f"Step {step_num} completed"))
+            asyncio.run(emit_progress(task_id, step, progress, message))
         except Exception as e:
             logger.error(f"Failed to emit progress: {e}")
+
+    try:
+        result = run_single_step(
+            step_num=step_num,
+            task_id=task_id,
+            output_dir=str(output_dir),
+            step_data=step_data,
+            log_cb=log_callback,
+            progress_cb=progress_callback,
+        )
+
+        try:
+            asyncio.run(emit_completed(task_id, result))
+        except Exception as e:
+            logger.error(f"Failed to emit completion: {e}")
 
         return result
 
@@ -299,7 +288,7 @@ def run_step_sync(step_num: int, task_id: str, step_data: dict):
     """Run a single step synchronously (fallback when Celery unavailable)."""
     from src.modules.workflow import run_single_step
     import asyncio
-    from .websocket import emit_progress, emit_log, emit_error
+    from .websocket import emit_progress, emit_log, emit_error, emit_completed
 
     output_dir = settings.OUTPUT_DIR / task_id
     _sync_tasks[task_id] = {"status": "running", "progress": 0, "message": f"Running step {step_num}...", "step": step_num}
@@ -334,11 +323,10 @@ def run_step_sync(step_num: int, task_id: str, step_data: dict):
 
         _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": f"Step {step_num} completed", "result": result, "step": step_num}
 
-        # Emit completion
         try:
-            asyncio.run(emit_progress(task_id, step_num, 100.0, f"Step {step_num} completed"))
+            asyncio.run(emit_completed(task_id, result))
         except Exception as e:
-            logger.error(f"Failed to emit progress: {e}")
+            logger.error(f"Failed to emit completion: {e}")
 
         return result
 

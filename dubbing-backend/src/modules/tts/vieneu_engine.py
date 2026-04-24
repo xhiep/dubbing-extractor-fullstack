@@ -9,10 +9,6 @@ from typing import Optional, Callable, List
 
 logger = logging.getLogger(__name__)
 
-from ...utils.runtime_env import ensure_local_runtime_env
-
-ensure_local_runtime_env()
-
 _TTS_CACHE: dict[tuple[str, str], object] = {}
 _VOICE_CACHE: dict[tuple[str, str], object] = {}
 _IMPORT_ERROR: Optional[str] = None
