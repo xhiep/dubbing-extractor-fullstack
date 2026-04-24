@@ -2,6 +2,7 @@
 import logging
 import tempfile
 import uuid
+import subprocess
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -12,6 +13,7 @@ router = APIRouter()
 
 # Store preview videos temporarily
 PREVIEW_CACHE = {}
+PREVIEW_IMAGE_CACHE = {}
 
 
 def _build_frontend_preview_band(height: int, top_y: int | None, bottom_y: int | None) -> list[dict]:
@@ -55,6 +57,114 @@ def cleanup_preview(preview_id: str):
             del PREVIEW_CACHE[preview_id]
         except Exception as e:
             logger.error(f"Failed to cleanup preview {preview_id}: {e}")
+
+
+def _extract_preview_frame(video_path: Path, output_path: Path, seek_sec: float = 0.35) -> None:
+    import sys
+    from pathlib import Path as P
+
+    backend_dir = P(__file__).parent.parent.parent
+    sys.path.insert(0, str(backend_dir))
+    from src.modules.video_processing.ffmpeg_wrapper import ffmpeg_cmd
+
+    cmd = [
+        ffmpeg_cmd(),
+        "-y",
+        "-ss", f"{max(0.0, float(seek_sec)):.3f}",
+        "-i", str(video_path),
+        "-frames:v", "1",
+        "-q:v", "2",
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "").strip()[-1200:])
+
+
+def _build_layout_response(
+    source: str,
+    start_time: float,
+    duration: float,
+    cover_mode: str,
+    cover_strength: int,
+    blur_padding_px: int,
+    cover_offset_px: int,
+):
+    import sys
+    from pathlib import Path as P
+
+    backend_dir = P(__file__).parent.parent.parent
+    sys.path.insert(0, str(backend_dir))
+
+    from src.modules.downloader.ytdlp_wrapper import download
+    from src.modules.video_processing.ffmpeg_wrapper import get_dims
+    from src.modules.video_processing.subtitle_detector import detect_sub_events
+    from src.modules.video_processing.video_encoder import _representative_band, _expand_band_from_center
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        video_path, _audio_path, _title = download(
+            source,
+            tmp,
+            download_range_start=start_time,
+            download_range_end=start_time + duration,
+        )
+
+        width, height = get_dims(video_path)
+        events = detect_sub_events(video_path, width, height)
+
+        subtitle_top_y = None
+        subtitle_bottom_y = None
+        cover_top_y = None
+        cover_bottom_y = None
+        if events:
+            subtitle_top_y, subtitle_bottom_y = _representative_band(events, height)
+            cover_top_y, cover_bottom_y = _expand_band_from_center(
+                subtitle_top_y,
+                subtitle_bottom_y,
+                height,
+                blur_padding_px,
+                cover_offset_px,
+            )
+
+        preview_id = uuid.uuid4().hex
+        preview_dir = Path("outputs/previews")
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        frame_path = preview_dir / f"{preview_id}.jpg"
+        _extract_preview_frame(video_path, frame_path)
+        PREVIEW_IMAGE_CACHE[preview_id] = str(frame_path)
+
+        return {
+            "image_url": f"/api/preview-render/image/{preview_id}",
+            "width": width,
+            "height": height,
+            "subtitle_top_y": subtitle_top_y,
+            "subtitle_bottom_y": subtitle_bottom_y,
+            "cover_top_y": cover_top_y,
+            "cover_bottom_y": cover_bottom_y,
+            "cover_mode": cover_mode,
+            "cover_strength": cover_strength,
+        }
+
+
+@router.post("/layout")
+async def get_preview_layout(request: PreviewRenderRequest):
+    """Return actual frame image and detected subtitle band for web preview alignment."""
+    try:
+        duration = min(8.0, max(3.0, request.duration or 5.0))
+        start_time = max(0.0, request.start_time)
+        return _build_layout_response(
+            source=request.source,
+            start_time=start_time,
+            duration=duration,
+            cover_mode=request.cover_mode,
+            cover_strength=request.cover_strength,
+            blur_padding_px=request.blur_padding_px,
+            cover_offset_px=request.cover_offset_px,
+        )
+    except Exception as e:
+        logger.error(f"Failed to build preview layout: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/render", response_model=PreviewRenderResponse)
@@ -191,4 +301,21 @@ async def get_preview_video(preview_id: str):
         video_path,
         media_type="video/mp4",
         filename=f"preview_{preview_id}.mp4",
+    )
+
+
+@router.get("/image/{preview_id}")
+async def get_preview_image(preview_id: str):
+    """Serve cached preview frame image."""
+    if preview_id not in PREVIEW_IMAGE_CACHE:
+        raise HTTPException(status_code=404, detail="Preview image not found")
+
+    image_path = PREVIEW_IMAGE_CACHE[preview_id]
+    if not Path(image_path).exists():
+        raise HTTPException(status_code=404, detail="Preview image file not found")
+
+    return FileResponse(
+        image_path,
+        media_type="image/jpeg",
+        filename=f"preview_{preview_id}.jpg",
     )

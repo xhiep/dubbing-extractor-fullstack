@@ -70,6 +70,7 @@ const expandBandFromCenter = (topY, bottomY, frameHeight, paddingPx, offsetPx = 
 }
 
 const PreviewCanvas = ({
+  imageUrl,
   thumbnail,
   previewText,
   coverMode,
@@ -82,6 +83,8 @@ const PreviewCanvas = ({
   maxCharsPerLine,
   previewWidth,
   previewHeight,
+  subtitleTopY,
+  subtitleBottomY,
   interactive = false,
   onSubtitleDrag,
 }) => {
@@ -91,11 +94,11 @@ const PreviewCanvas = ({
   const imgRef = useRef(null)
 
   useEffect(() => {
-    if (!thumbnail) return
+    if (!imageUrl && !thumbnail) return
 
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.src = `/api/preview/thumbnail?url=${encodeURIComponent(thumbnail)}`
+    img.src = imageUrl || `/api/preview/thumbnail?url=${encodeURIComponent(thumbnail)}`
 
     img.onload = () => {
       imgRef.current = img
@@ -105,7 +108,7 @@ const PreviewCanvas = ({
     img.onerror = () => {
       console.error('Failed to load thumbnail for canvas')
     }
-  }, [thumbnail])
+  }, [imageUrl, thumbnail])
 
   useEffect(() => {
     if (!imageLoaded || !imgRef.current || !canvasRef.current) return
@@ -119,7 +122,9 @@ const PreviewCanvas = ({
     ctx.drawImage(img, 0, 0)
 
     const frameHeight = previewHeight || img.height
-    const { topY: representativeTopY, bottomY: representativeBottomY } = getRepresentativeSubtitleBand(frameHeight)
+    const fallbackBand = getRepresentativeSubtitleBand(frameHeight)
+    const representativeTopY = subtitleTopY ?? fallbackBand.topY
+    const representativeBottomY = subtitleBottomY ?? fallbackBand.bottomY
     const coverBand = expandBandFromCenter(
       representativeTopY,
       representativeBottomY,
@@ -199,6 +204,8 @@ const PreviewCanvas = ({
     maxCharsPerLine,
     previewWidth,
     previewHeight,
+    subtitleTopY,
+    subtitleBottomY,
   ])
 
   useEffect(() => {

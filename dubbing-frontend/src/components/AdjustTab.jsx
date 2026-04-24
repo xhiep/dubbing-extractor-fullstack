@@ -64,6 +64,8 @@ const AdjustTab = () => {
   const [previewRenderUrl, setPreviewRenderUrl] = useState(null)
   const [previewStartTime, setPreviewStartTime] = useState(10)
   const [previewDuration, setPreviewDuration] = useState(15)
+  const [previewLayout, setPreviewLayout] = useState(null)
+  const [previewLayoutLoading, setPreviewLayoutLoading] = useState(false)
   const videoRef = useRef(null)
 
   const previewTotalDuration = Math.max(5, Math.floor(preview?.duration || 30))
@@ -96,6 +98,55 @@ const AdjustTab = () => {
     processingOptions.blur_padding_px,
     processingOptions.cover_offset_px,
     renderVideoSpeed,
+  ])
+
+  useEffect(() => {
+    if (!processingOptions.source || !preview) {
+      setPreviewLayout(null)
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setPreviewLayoutLoading(true)
+      try {
+        const response = await apiClient.post('/preview-render/layout', {
+          source: processingOptions.source,
+          start_time: previewStartTime,
+          duration: previewDuration,
+          cover_mode: processingOptions.cover_mode,
+          cover_strength: processingOptions.cover_strength,
+          blur_padding_px: processingOptions.blur_padding_px,
+          cover_offset_px: processingOptions.cover_offset_px,
+        })
+        if (!cancelled) {
+          setPreviewLayout(response.data)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Preview layout failed:', error)
+          setPreviewLayout(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setPreviewLayoutLoading(false)
+        }
+      }
+    }, 350)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [
+    processingOptions.source,
+    preview,
+    previewStartTime,
+    previewDuration,
+    processingOptions.cover_mode,
+    processingOptions.cover_strength,
+    processingOptions.blur_padding_px,
+    processingOptions.cover_offset_px,
   ])
 
   useEffect(() => {
@@ -158,7 +209,9 @@ const AdjustTab = () => {
     setPreviewRenderUrl(null)
 
     try {
-      const subtitleBand = getRepresentativeSubtitleBand(preview?.height || 1080)
+      const subtitleBand = previewLayout?.subtitle_top_y != null && previewLayout?.subtitle_bottom_y != null
+        ? { topY: previewLayout.subtitle_top_y, bottomY: previewLayout.subtitle_bottom_y }
+        : getRepresentativeSubtitleBand(preview?.height || 1080)
       const response = await apiClient.post('/preview-render/render', {
         source: processingOptions.source,
         start_time: previewStartTime,
@@ -287,6 +340,7 @@ const AdjustTab = () => {
               </video>
             ) : preview && preview.thumbnail && !thumbnailError ? (
               <PreviewCanvas
+                imageUrl={previewLayout?.image_url || null}
                 thumbnail={preview.thumbnail}
                 previewText={processingOptions.burn_subtitle ? previewText : ''}
                 coverMode={processingOptions.cover_mode}
@@ -297,8 +351,10 @@ const AdjustTab = () => {
                 blurPadding={processingOptions.blur_padding_px}
                 coverOffset={processingOptions.cover_offset_px}
                 maxCharsPerLine={processingOptions.srt_max_chars_per_line}
-                previewWidth={preview.width}
-                previewHeight={preview.height}
+                previewWidth={previewLayout?.width || preview.width}
+                previewHeight={previewLayout?.height || preview.height}
+                subtitleTopY={previewLayout?.subtitle_top_y}
+                subtitleBottomY={previewLayout?.subtitle_bottom_y}
                 interactive
                 onSubtitleDrag={handleSubtitleDrag}
               />
@@ -323,6 +379,14 @@ const AdjustTab = () => {
             <div className="notice-info rounded-apple-xl p-4 mt-4">
               <p className="text-blue-600 text-control font-medium">
                 Đang render preview video với blur và subtitle...
+              </p>
+            </div>
+          )}
+
+          {previewLayoutLoading && !previewRenderLoading && (
+            <div className="notice-info rounded-apple-xl p-4 mt-4">
+              <p className="text-blue-600 text-control font-medium">
+                Đang đồng bộ frame preview thật từ backend...
               </p>
             </div>
           )}
