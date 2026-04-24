@@ -37,6 +37,7 @@ const useWebSocket = () => {
     // Task events
     socket.on('progress', (data) => {
       console.log('Progress:', data)
+      setStatus('running')
       setProgress(data.step, data.progress, data.message)
     })
 

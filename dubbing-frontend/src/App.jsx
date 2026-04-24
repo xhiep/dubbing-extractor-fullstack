@@ -162,6 +162,7 @@ function App() {
           {isProcessing && (
             <div className="mt-6">
               <ProgressBar
+                status={status}
                 progress={progress}
                 step={currentStep}
                 message={message}

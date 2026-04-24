@@ -4,13 +4,14 @@ import useAppStore from '../store/appStore'
 import toast from 'react-hot-toast'
 
 export const useProcessing = () => {
-  const { processingOptions, setTaskId, setStatus, addLog, reset } = useAppStore()
+  const { processingOptions, setTaskId, setStatus, setProgress, addLog, reset } = useAppStore()
 
   const startMutation = useMutation({
     mutationFn: () => processAPI.start(processingOptions),
     onSuccess: (data) => {
       setTaskId(data.task_id)
       setStatus(data.status)
+      setProgress(1, 0, data.message || 'Dang xep hang xu ly...')
       addLog('info', `Task started: ${data.task_id}`)
       toast.success('Processing started')
     },
@@ -52,7 +53,7 @@ export const usePreview = (source) => {
 }
 
 export const useStepProcessing = () => {
-  const { setTaskId, setStatus, addLog } = useAppStore()
+  const { setTaskId, setStatus, setProgress, addLog } = useAppStore()
 
   const runStepMutation = useMutation({
     mutationFn: ({ stepNum, taskId, stepData }) =>
@@ -60,6 +61,7 @@ export const useStepProcessing = () => {
     onSuccess: (data, variables) => {
       setTaskId(data.task_id)
       setStatus(data.status)
+      setProgress(variables.stepNum, 0, data.message || `Step ${variables.stepNum} started`)
       addLog('info', `Step ${variables.stepNum} started`)
       toast.success(`Step ${variables.stepNum} started`)
     },
