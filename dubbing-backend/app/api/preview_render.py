@@ -60,6 +60,8 @@ async def render_preview(request: PreviewRenderRequest):
         from src.modules.video_processing.ffmpeg_wrapper import get_dims, probe_duration
         from src.modules.video_processing.subtitle_detector import detect_sub_events
 
+        render_video_speed = float(request.render_video_speed or request.video_speed or 1.0)
+
         # Validate duration
         duration = min(30.0, max(5.0, request.duration))
         start_time = max(0.0, request.start_time)
@@ -101,7 +103,7 @@ async def render_preview(request: PreviewRenderRequest):
                 blur_power=request.cover_strength,
                 blur_padding_px=request.blur_padding_px,
                 cover_offset_px=request.cover_offset_px,
-                video_speed=request.video_speed,
+                video_speed=render_video_speed,
             )
 
             final_path = tmp / f"preview_{uuid.uuid4().hex[:8]}.mp4"

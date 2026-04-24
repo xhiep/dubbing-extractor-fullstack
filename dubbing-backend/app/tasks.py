@@ -208,7 +208,7 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
     # Filter options to only valid process_video parameters
     valid_keys = {
         'cover_mode', 'burn_sub', 'subtitle_offset_sec',
-        'subtitle_timing_scale', 'video_speed', 'srt_max_chars_per_line',
+        'subtitle_timing_scale', 'video_speed', 'render_video_speed', 'output_video_speed', 'srt_max_chars_per_line',
         'subtitle_font_scale', 'subtitle_font_size', 'subtitle_margin_px',
         'blur_padding_px', 'cover_offset_px', 'blur_power',
         'enable_dub', 'dub_mode', 'dub_backend_mode', 'dub_remote_api_base',
@@ -236,12 +236,24 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
             srt_file = None
 
             if out_dir.exists():
-                # Look for video files
-                for ext in ['.mp4', '.mkv', '.webm']:
-                    video_files = list(out_dir.glob(f'*{ext}'))
-                    if video_files:
-                        video_file = str(video_files[0])
+                preferred_video_names = [
+                    'video_sub_viet_long_tieng.mp4',
+                    'video_long_tieng.mp4',
+                    'video_sub_viet.mp4',
+                    'video_ready.mp4',
+                ]
+                for name in preferred_video_names:
+                    candidate = out_dir / name
+                    if candidate.exists():
+                        video_file = str(candidate)
                         break
+
+                if not video_file:
+                    for ext in ['.mp4', '.mkv', '.webm']:
+                        video_files = sorted(out_dir.glob(f'*{ext}'))
+                        if video_files:
+                            video_file = str(video_files[0])
+                            break
 
                 # Look for audio files
                 for ext in ['.mp3', '.wav', '.m4a']:

@@ -40,6 +40,8 @@ const useAppStore = create(
     subtitle_offset_sec: 0.0,
     blur_padding_px: 12,
     cover_offset_px: 0,
+    render_video_speed: 1.0,
+    output_video_speed: 1.0,
     video_speed: 1.0,
     output_format: 'mp4',
 
@@ -104,10 +106,30 @@ const useAppStore = create(
 }),
     {
       name: 'dubbing-app-storage',
+      version: 2,
       partialize: (state) => ({
         theme: state.theme,
         processingOptions: state.processingOptions,
       }),
+      merge: (persistedState, currentState) => {
+        const mergedState = {
+          ...currentState,
+          ...persistedState,
+        }
+
+        const persistedOptions = persistedState?.processingOptions || {}
+        const fallbackSpeed = persistedOptions.video_speed ?? currentState.processingOptions.video_speed
+
+        mergedState.processingOptions = {
+          ...currentState.processingOptions,
+          ...persistedOptions,
+          render_video_speed: persistedOptions.render_video_speed ?? fallbackSpeed,
+          output_video_speed: persistedOptions.output_video_speed ?? fallbackSpeed,
+          video_speed: persistedOptions.video_speed ?? fallbackSpeed,
+        }
+
+        return mergedState
+      },
     }
   )
 )

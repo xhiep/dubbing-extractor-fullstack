@@ -36,6 +36,8 @@ class ProcessRequest(BaseModel):
     tts_voice: str = "female_north"
 
     # Video options
+    render_video_speed: float = 1.0
+    output_video_speed: float = 1.0
     video_speed: float = 1.0
     output_format: str = "mp4"
 
@@ -66,6 +68,8 @@ class PreviewRenderRequest(BaseModel):
     srt_max_chars_per_line: int = 45
     blur_padding_px: int = 12
     cover_offset_px: int = 0
+    render_video_speed: float = 1.0
+    output_video_speed: float = 1.0
     video_speed: float = 1.0
 
 

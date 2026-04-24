@@ -67,6 +67,9 @@ const AdjustTab = () => {
   const videoRef = useRef(null)
 
   const previewTotalDuration = Math.max(5, Math.floor(preview?.duration || 30))
+  const renderVideoSpeed = processingOptions.render_video_speed ?? processingOptions.video_speed ?? 1.0
+  const outputVideoSpeed = processingOptions.output_video_speed ?? processingOptions.video_speed ?? 1.0
+  const exportVsRenderFactor = outputVideoSpeed / Math.max(0.01, renderVideoSpeed)
 
   useEffect(() => {
     if (outputs.video_path && videoRef.current) {
@@ -92,7 +95,7 @@ const AdjustTab = () => {
     processingOptions.subtitle_offset_sec,
     processingOptions.blur_padding_px,
     processingOptions.cover_offset_px,
-    processingOptions.video_speed,
+    renderVideoSpeed,
   ])
 
   useEffect(() => {
@@ -147,7 +150,7 @@ const AdjustTab = () => {
 
   const handleRenderPreview = async () => {
     if (!processingOptions.source) {
-      alert('Vui lòng nhập URL video ở tab Nguồn Video')
+      alert('Vui long nhap URL video o tab Nguon Video')
       return
     }
 
@@ -169,13 +172,15 @@ const AdjustTab = () => {
         srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
         blur_padding_px: processingOptions.blur_padding_px,
         cover_offset_px: processingOptions.cover_offset_px,
-        video_speed: processingOptions.video_speed,
+        render_video_speed: renderVideoSpeed,
+        output_video_speed: outputVideoSpeed,
+        video_speed: renderVideoSpeed,
       })
 
       setPreviewRenderUrl(response.data.video_url)
     } catch (error) {
       console.error('Preview render failed:', error)
-      alert(`Lỗi render preview: ${error.response?.data?.detail || error.message}`)
+      alert(`Loi render preview: ${error.response?.data?.detail || error.message}`)
     } finally {
       setPreviewRenderLoading(false)
     }
@@ -574,17 +579,53 @@ const AdjustTab = () => {
         <SectionCard title="Video">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Video Speed: {processingOptions.video_speed.toFixed(1)}x
+              Render Speed: {renderVideoSpeed.toFixed(1)}x
             </label>
             <input
               type="range"
               min="0.5"
               max="2.0"
               step="0.1"
-              value={processingOptions.video_speed}
-              onChange={(e) => updateProcessingOptions({ video_speed: parseFloat(e.target.value) })}
+              value={renderVideoSpeed}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value)
+                updateProcessingOptions({
+                  render_video_speed: value,
+                  video_speed: value,
+                })
+              }}
               className="w-full accent-apple-blue"
             />
+          </div>
+
+          <div>
+            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
+              Output Speed: {outputVideoSpeed.toFixed(1)}x so voi video goc
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="2.0"
+              step="0.1"
+              value={outputVideoSpeed}
+              onChange={(e) => updateProcessingOptions({ output_video_speed: parseFloat(e.target.value) })}
+              className="w-full accent-apple-blue"
+            />
+          </div>
+
+          <div className="surface-subtle rounded-apple-lg p-4 space-y-2">
+            <p className="text-control font-medium text-apple-ink">
+              Render = toc do dung cho cover + subtitle timing + long tieng
+            </p>
+            <p className="text-control text-apple-gray-secondary">
+              Output = toc do file xuat cuoi cung so voi video goc.
+            </p>
+            <p className="text-control text-apple-gray-secondary">
+              He so retime cuoi: {outputVideoSpeed.toFixed(2)} / {renderVideoSpeed.toFixed(2)} = {exportVsRenderFactor.toFixed(2)}x
+            </p>
+            <p className="text-micro text-apple-gray-secondary">
+              Vi du: render 0.8x + output 1.0x nghia la pipeline xu ly va long tieng tren timeline cham hon, sau do file cuoi duoc dua ve toc do goc 1.0x.
+            </p>
           </div>
 
           <div>

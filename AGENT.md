@@ -22,6 +22,10 @@
   - left: preview/video/timeline/preview text
   - right: stacked controls
   - responsive fallback: auto-stack into 1 column on narrow widths
+- Speed handling is now split:
+  - `render_video_speed`: speed used during cover/render/subtitle timing/dubbing generation
+  - `output_video_speed`: final exported speed relative to the original video
+  - legacy `video_speed` is kept only as a backward-compatibility fallback for old persisted settings/payloads
 - VieNeu-TTS status bug was fixed by syncing frontend API client with backend endpoints.
 - Step-by-step mode is being aligned with the old repo:
   - user can choose a target step directly
@@ -49,6 +53,10 @@
 - Running target step 3 via `/api/process/step/3` auto-completes missing prerequisites and returns `srt_content`.
 - `/api/process/step-srt/{task_id}` supports save/reload for edited SRT.
 - Running target step 5 after editing SRT keeps the edited subtitle content in outputs.
+- `processingOptions` persists in Zustand local storage and now auto-migrates old `video_speed` into both `render_video_speed` and `output_video_speed`.
+- Preview render was re-tested with the Bilibili sample URL at `render_video_speed=0.8`:
+  - API returned a playable preview clip successfully
+  - downloaded preview clip duration was about `6.43s` for a source clip reported as `5.566s`, confirming preview render is following render-speed slowdown
 
 ## Scripts
 - `setup_full.bat`: install/setup full environment

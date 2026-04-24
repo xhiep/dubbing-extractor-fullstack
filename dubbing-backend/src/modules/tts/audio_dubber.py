@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Callable, Dict, List
 
-from ..video_processing.ffmpeg_wrapper import ffmpeg_cmd, probe_duration
+from ..video_processing.ffmpeg_wrapper import ffmpeg_cmd, probe_duration, atempo_chain
 from .vieneu_engine import synthesize_speech
 
 
@@ -29,19 +29,6 @@ def _run(cmd: list[str], log_cb=None):
     return proc
 
 
-def _atempo_chain(speed: float) -> str:
-    speed = max(0.5, min(100.0, speed))
-    parts = []
-    while speed > 2.0:
-        parts.append("atempo=2.0")
-        speed /= 2.0
-    while speed < 0.5:
-        parts.append("atempo=0.5")
-        speed /= 0.5
-    parts.append(f"atempo={speed:.5f}")
-    return ",".join(parts)
-
-
 def _fit_segment_duration(src: Path, dst: Path, target_duration: float, log_cb=None) -> Path:
     if target_duration <= 0.05:
         shutil.copy2(src, dst)
@@ -51,7 +38,7 @@ def _fit_segment_duration(src: Path, dst: Path, target_duration: float, log_cb=N
     speed = current / target_duration
     filters = []
     if speed < 0.96 or speed > 1.04:
-        filters.append(_atempo_chain(speed))
+        filters.append(atempo_chain(speed))
     filters.append("apad")
     filters.append(f"atrim=0:{target_duration:.3f}")
     cmd = [

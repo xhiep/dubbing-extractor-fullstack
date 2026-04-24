@@ -9,7 +9,7 @@ from typing import Optional, Callable, Tuple, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-from .ffmpeg_wrapper import ffmpeg_cmd, probe_duration
+from .ffmpeg_wrapper import ffmpeg_cmd, probe_duration, atempo_chain
 from ...utils.file_utils import safe_path
 
 def _has_nvenc() -> bool:
@@ -190,18 +190,6 @@ def _build_blur_filter(events: list, blur_power: int) -> tuple[str, str]:
             )
         base = f"base{idx}"
     return ";".join(parts), f"[{base}]"
-
-def _atempo_chain(speed: float) -> str:
-    speed = max(0.5, min(100.0, float(speed)))
-    parts = []
-    while speed > 2.0:
-        parts.append("atempo=2.0")
-        speed /= 2.0
-    while speed < 0.5:
-        parts.append("atempo=0.5")
-        speed /= 0.5
-    parts.append(f"atempo={speed:.5f}")
-    return ",".join(parts)
 
 def _run_ff(cmd, log_cb=None) -> int:
     """Chạy ffmpeg, parse progress, trả về returncode. Raise RuntimeError nếu lỗi."""
@@ -384,7 +372,7 @@ def render_clean_video(
         enc_args, label = _build_enc_args(use_nvenc)
         ff = ffmpeg_cmd()
         if effective_mode == "none":
-            filter_complex = f"[0:v]setpts=PTS/{speed:.6f}[vout];[0:a]{_atempo_chain(speed)}[aout]"
+            filter_complex = f"[0:v]setpts=PTS/{speed:.6f}[vout];[0:a]{atempo_chain(speed)}[aout]"
             output_label = "[vout]"
         elif effective_mode == "blackbar":
             filter_complex, output_label = _build_blackbar_filter(normalized_events)
@@ -394,7 +382,7 @@ def render_clean_video(
             filter_complex = (
                 f"{filter_complex};"
                 f"{output_label}setpts=PTS/{speed:.6f}[vout];"
-                f"[0:a]{_atempo_chain(speed)}[aout]"
+                f"[0:a]{atempo_chain(speed)}[aout]"
             )
             output_label = "[vout]"
             

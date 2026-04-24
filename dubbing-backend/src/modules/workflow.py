@@ -16,7 +16,7 @@ from .downloader.ytdlp_wrapper import download
 from .transcription.whisper_engine import transcribe
 from .transcription.translator import translate
 from .transcription.srt_generator import write_srt, parse_srt
-from .video_processing.ffmpeg_wrapper import extract_audio_local, get_dims
+from .video_processing.ffmpeg_wrapper import extract_audio_local, get_dims, retime_video_with_audio
 from .video_processing.subtitle_detector import detect_sub_events
 from .video_processing.video_encoder import render_clean_video
 from .video_processing.subtitle_burner import burn_subtitle
@@ -196,7 +196,7 @@ def step3_translate(
     segs: list,
     subtitle_timing_scale: float = 1.0,
     subtitle_offset_sec: float = 0.0,
-    video_speed: float = 1.0,
+    render_video_speed: float = 1.0,
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> List[Dict[str, Any]]:
     """Translate segments to Vietnamese and apply timing adjustments.
@@ -208,7 +208,7 @@ def step3_translate(
         segs: List of transcription segments with text and timestamps
         subtitle_timing_scale: Timing scale multiplier (default 1.0)
         subtitle_offset_sec: Time offset in seconds to shift all subtitles
-        video_speed: Video playback speed multiplier (default 1.0)
+        render_video_speed: Render playback speed multiplier (default 1.0)
         log_cb: Optional callback function for logging progress
 
     Returns:
@@ -228,7 +228,7 @@ def step3_translate(
     _log("\n" + "="*52 + "\n  BƯỚC 3: DỊCH SANG TIẾNG VIỆT\n" + "="*52)
     segs_vi = translate(segs, log_cb)
     if segs_vi:
-        segs_vi = _apply_subtitle_timing(segs_vi, subtitle_timing_scale, subtitle_offset_sec, video_speed)
+        segs_vi = _apply_subtitle_timing(segs_vi, subtitle_timing_scale, subtitle_offset_sec, render_video_speed)
     return segs_vi or []
 
 
@@ -240,7 +240,7 @@ def step4_cover(
     blur_padding_px: int = 12,
     cover_offset_px: int = 0,
     blur_power: int = 4,
-    video_speed: float = 1.0,
+    render_video_speed: float = 1.0,
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     """Cover original subtitles and render clean video.
@@ -256,7 +256,7 @@ def step4_cover(
         blur_padding_px: Extra padding around subtitle region in pixels
         cover_offset_px: Vertical offset to shift cover region
         blur_power: Blur intensity (1-10)
-        video_speed: Video playback speed multiplier
+        render_video_speed: Render playback speed multiplier
         log_cb: Optional callback function for logging progress
 
     Returns:
@@ -294,7 +294,7 @@ def step4_cover(
         blur_padding_px=blur_padding_px,
         cover_offset_px=cover_offset_px,
         blur_power=blur_power,
-        video_speed=video_speed,
+        video_speed=render_video_speed,
     )
 
     return {
@@ -318,7 +318,8 @@ def step5_export(
     cover_offset_px: int = 0,
     subtitle_offset_sec: float = 0.0,
     subtitle_timing_scale: float = 1.0,
-    video_speed: float = 1.0,
+    render_video_speed: float = 1.0,
+    output_video_speed: float = 1.0,
     cover_mode: str = "blur",
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
@@ -343,7 +344,8 @@ def step5_export(
         cover_offset_px: Cover offset used in covering
         subtitle_offset_sec: Subtitle time offset
         subtitle_timing_scale: Subtitle timing scale
-        video_speed: Video speed multiplier
+        render_video_speed: Render speed multiplier
+        output_video_speed: Final output speed relative to original video
         cover_mode: Cover mode used
         log_cb: Optional callback function for logging progress
 
@@ -379,7 +381,9 @@ def step5_export(
                 "cover_offset_px": cover_offset_px,
                 "subtitle_offset_sec": subtitle_offset_sec,
                 "subtitle_timing_scale": subtitle_timing_scale,
-                "video_speed": video_speed,
+                "render_video_speed": render_video_speed,
+                "output_video_speed": output_video_speed,
+                "video_speed": render_video_speed,
                 "subtitle_font_scale": subtitle_font_scale,
                 "subtitle_font_size": subtitle_font_size,
                 "subtitle_margin_px": subtitle_margin_px,
@@ -545,6 +549,8 @@ def process_video(
     log_cb: Optional[Callable[[str], None]] = None,
     subtitle_offset_sec: float = 0.0,
     subtitle_timing_scale: float = 1.0,
+    render_video_speed: float = 1.0,
+    output_video_speed: float = 1.0,
     video_speed: float = 1.0,
     srt_max_chars_per_line: int = 45,
     subtitle_font_scale: float = 1.0,
@@ -576,6 +582,13 @@ def process_video(
         Output directory path if successful, None otherwise
     """
     _log = _make_log(log_cb)
+    effective_render_speed, effective_output_speed = _resolve_speed_options(
+        {
+            "render_video_speed": render_video_speed,
+            "output_video_speed": output_video_speed,
+            "video_speed": video_speed,
+        }
+    )
 
     total_steps = 5
     if burn_sub:
@@ -599,7 +612,13 @@ def process_video(
         segs = step2_transcribe(raw_audio, log_cb)
 
         # Bước 3
-        segs_vi = step3_translate(segs, subtitle_timing_scale, subtitle_offset_sec, video_speed, log_cb)
+        segs_vi = step3_translate(
+            segs,
+            subtitle_timing_scale,
+            subtitle_offset_sec,
+            effective_render_speed,
+            log_cb,
+        )
 
         # Bước 4
         result4 = step4_cover(
@@ -607,7 +626,7 @@ def process_video(
             blur_padding_px=blur_padding_px,
             cover_offset_px=cover_offset_px,
             blur_power=blur_power,
-            video_speed=video_speed,
+            render_video_speed=effective_render_speed,
             log_cb=log_cb,
         )
         final_video = result4["final_video"]
@@ -625,13 +644,14 @@ def process_video(
             cover_offset_px=cover_offset_px,
             subtitle_offset_sec=subtitle_offset_sec,
             subtitle_timing_scale=subtitle_timing_scale,
-            video_speed=video_speed,
+            render_video_speed=effective_render_speed,
+            output_video_speed=effective_output_speed,
             cover_mode=cover_mode,
             log_cb=log_cb,
         )
 
         # Bước 6: Burn sub (optional)
-        dub_video_source = final_video
+        final_output_video = final_video
         if burn_sub and segs_vi and srt_path:
             burned = step6_burn(
                 final_video, srt_path, cover_meta, out_dir,
@@ -641,7 +661,7 @@ def process_video(
                 log_cb=log_cb,
             )
             if Path(burned).exists():
-                dub_video_source = burned
+                final_output_video = burned
 
         # Bước 7: Lồng tiếng (optional)
         if enable_dub and segs_vi:
@@ -651,8 +671,8 @@ def process_video(
                 if parsed:
                     dub_segments = parsed
 
-            step7_dub(
-                dub_video_source, dub_segments, out_dir,
+            dubbed = step7_dub(
+                final_output_video, dub_segments, out_dir,
                 dub_mode=dub_mode,
                 dub_backend_mode=dub_backend_mode,
                 dub_remote_api_base=dub_remote_api_base,
@@ -665,6 +685,22 @@ def process_video(
                 output_video_name="video_sub_viet_long_tieng.mp4" if burn_sub else "video_long_tieng.mp4",
                 log_cb=log_cb,
             )
+            final_output_video = str(dubbed["dub_video"])
+
+        retimed_final_output = _retime_final_video_if_needed(
+            final_output_video,
+            out_dir,
+            effective_render_speed,
+            effective_output_speed,
+            "final_speed",
+            log_cb=log_cb,
+        )
+        if retimed_final_output != final_output_video:
+            target_path = Path(final_output_video)
+            retimed_path = Path(retimed_final_output)
+            if target_path.exists():
+                target_path.unlink()
+            retimed_path.replace(target_path)
 
         # Summary
         out_dir_path = Path(out_dir)
@@ -758,6 +794,7 @@ def _clear_downstream_state(state: dict, step_num: int) -> None:
             "srt_path",
             "final_video",
             "cover_meta",
+            "burned_video_render",
             "burned_video",
             "dub_track",
             "dub_video",
@@ -769,6 +806,7 @@ def _clear_downstream_state(state: dict, step_num: int) -> None:
             "srt_path",
             "final_video",
             "cover_meta",
+            "burned_video_render",
             "burned_video",
             "dub_track",
             "dub_video",
@@ -778,16 +816,17 @@ def _clear_downstream_state(state: dict, step_num: int) -> None:
         for key in (
             "final_video",
             "cover_meta",
+            "burned_video_render",
             "burned_video",
             "dub_track",
             "dub_video",
         ):
             state.pop(key, None)
     elif step_num <= 4:
-        for key in ("burned_video", "dub_track", "dub_video"):
+        for key in ("burned_video_render", "burned_video", "dub_track", "dub_video"):
             state.pop(key, None)
     elif step_num <= 5:
-        for key in ("burned_video", "dub_track", "dub_video"):
+        for key in ("burned_video_render", "burned_video", "dub_track", "dub_video"):
             state.pop(key, None)
     elif step_num <= 6:
         for key in ("dub_track", "dub_video"):
@@ -837,7 +876,35 @@ def _collect_step_outputs(state: dict, step_num: int) -> dict:
         "cover_meta": state.get("cover_meta") or {},
         "dub_audio_path": state.get("dub_track"),
         "dub_video_path": state.get("dub_video"),
+        "render_video_speed": state.get("options", {}).get("render_video_speed", state.get("options", {}).get("video_speed", 1.0)),
+        "output_video_speed": state.get("options", {}).get("output_video_speed", 1.0),
     }
+
+
+def _resolve_speed_options(options: dict) -> tuple[float, float]:
+    render_video_speed = float(options.get("render_video_speed", options.get("video_speed", 1.0)) or 1.0)
+    output_video_speed = float(options.get("output_video_speed", 1.0) or 1.0)
+    render_video_speed = max(0.25, min(4.0, render_video_speed))
+    output_video_speed = max(0.25, min(4.0, output_video_speed))
+    return render_video_speed, output_video_speed
+
+
+def _retime_final_video_if_needed(
+    video_path: str,
+    out_dir: str,
+    render_video_speed: float,
+    output_video_speed: float,
+    suffix: str,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> str:
+    factor = output_video_speed / render_video_speed
+    if abs(factor - 1.0) <= 0.001:
+        return video_path
+
+    src = Path(video_path)
+    dst = Path(out_dir) / f"{src.stem}_{suffix}{src.suffix}"
+    retime_video_with_audio(src, dst, factor, log_cb=log_cb)
+    return str(dst)
 
 
 def run_single_step(
@@ -883,6 +950,7 @@ def run_single_step(
         for current_step in range(1, step_num + 1):
             force_run = current_step == step_num
             options = state.get("options") or {}
+            render_video_speed, output_video_speed = _resolve_speed_options(options)
             _log(f"Starting step {current_step}: {step_names.get(current_step, current_step)}")
 
             if current_step == 1:
@@ -918,7 +986,7 @@ def run_single_step(
                         state["segments"],
                         options.get("subtitle_timing_scale", 1.0),
                         options.get("subtitle_offset_sec", 0.0),
-                        options.get("video_speed", 1.0),
+                        render_video_speed,
                         log_cb,
                     )
                 _write_step3_srt(state, options.get("srt_max_chars_per_line", 45))
@@ -941,7 +1009,7 @@ def run_single_step(
                         blur_padding_px=options.get("blur_padding_px", 12),
                         cover_offset_px=options.get("cover_offset_px", 0),
                         blur_power=options.get("cover_strength", 15),
-                        video_speed=options.get("video_speed", 1.0),
+                        render_video_speed=render_video_speed,
                         log_cb=log_cb,
                     )
                     state["final_video"] = result.get("final_video")
@@ -970,7 +1038,8 @@ def run_single_step(
                     cover_offset_px=options.get("cover_offset_px", 0),
                     subtitle_offset_sec=options.get("subtitle_offset_sec", 0.0),
                     subtitle_timing_scale=options.get("subtitle_timing_scale", 1.0),
-                    video_speed=options.get("video_speed", 1.0),
+                    render_video_speed=render_video_speed,
+                    output_video_speed=output_video_speed,
                     cover_mode=options.get("cover_mode", "blur"),
                     log_cb=log_cb,
                 )
@@ -985,7 +1054,7 @@ def run_single_step(
                 if not state.get("final_video") or not state.get("srt_path"):
                     raise ValueError("step 4/5 output missing")
                 _progress(6, 30, "Burning subtitle into video...")
-                state["burned_video"] = step6_burn(
+                state["burned_video_render"] = step6_burn(
                     state["final_video"],
                     state["srt_path"],
                     state.get("cover_meta") or {},
@@ -993,6 +1062,14 @@ def run_single_step(
                     subtitle_font_scale=options.get("subtitle_font_scale", 1.0),
                     subtitle_font_size=options.get("subtitle_font_size", 0),
                     subtitle_margin_px=options.get("subtitle_margin_px", 0),
+                    log_cb=log_cb,
+                )
+                state["burned_video"] = _retime_final_video_if_needed(
+                    state["burned_video_render"],
+                    state["out_dir"],
+                    render_video_speed,
+                    output_video_speed,
+                    "burned_speed",
                     log_cb=log_cb,
                 )
                 _ensure_completed_step(state, 6)
@@ -1003,7 +1080,7 @@ def run_single_step(
                 segs_vi = _load_srt_segments_from_state(state)
                 if not segs_vi:
                     raise ValueError("subtitle data missing before dubbing")
-                video_source = state.get("burned_video") or state.get("final_video") or state.get("raw_video")
+                video_source = state.get("burned_video_render") or state.get("final_video") or state.get("raw_video")
                 _progress(7, 30, "Generating dub...")
                 dubbed = step7_dub(
                     video_source,
@@ -1022,7 +1099,14 @@ def run_single_step(
                     log_cb=log_cb,
                 )
                 state["dub_track"] = str(dubbed["dub_track"])
-                state["dub_video"] = str(dubbed["dub_video"])
+                state["dub_video"] = _retime_final_video_if_needed(
+                    str(dubbed["dub_video"]),
+                    state["out_dir"],
+                    render_video_speed,
+                    output_video_speed,
+                    "dubbed_speed",
+                    log_cb=log_cb,
+                )
                 _ensure_completed_step(state, 7)
                 save_step_state(output_dir, state)
                 _progress(7, 100, "Step 7 completed")

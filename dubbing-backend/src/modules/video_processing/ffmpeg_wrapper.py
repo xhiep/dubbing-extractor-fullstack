@@ -128,3 +128,57 @@ def probe_duration(path: Path) -> float:
         logger.debug(f"Could not parse duration from ffprobe output: {e}")
         return 0.0
 
+
+def atempo_chain(speed: float) -> str:
+    speed = max(0.5, min(100.0, float(speed)))
+    parts = []
+    while speed > 2.0:
+        parts.append("atempo=2.0")
+        speed /= 2.0
+    while speed < 0.5:
+        parts.append("atempo=0.5")
+        speed /= 0.5
+    parts.append(f"atempo={speed:.5f}")
+    return ",".join(parts)
+
+
+def retime_video_with_audio(
+    src: Path,
+    dst: Path,
+    speed_factor: float,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> Path:
+    def _log(msg: str):
+        if log_cb:
+            log_cb(msg)
+
+    speed = max(0.25, min(4.0, float(speed_factor or 1.0)))
+    if abs(speed - 1.0) <= 0.001:
+        shutil.copy2(src, dst)
+        return dst
+
+    _log(f"->  Retiming final output to {speed:.2f}x relative to render")
+    cmd = [
+        ffmpeg_cmd(), "-y",
+        "-i", str(src),
+        "-filter:v", f"setpts=PTS/{speed:.6f}",
+        "-filter:a", atempo_chain(speed),
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "fast",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
+        str(dst),
+    ]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "").strip()[-1200:])
+    return dst
+
