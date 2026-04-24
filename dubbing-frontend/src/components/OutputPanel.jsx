@@ -8,17 +8,29 @@ const OutputPanel = () => {
     return null
   }
 
-  const handleOpenFolder = () => {
+  const handleOpenFolder = async () => {
     if (outputs.out_dir) {
-      // Open folder in file explorer
-      window.open(`file:///${outputs.out_dir}`, '_blank')
+      try {
+        const response = await fetch('/api/process/open-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_path: outputs.out_dir })
+        })
+        if (!response.ok) {
+          console.error('Failed to open folder:', await response.text())
+          alert('Không thể mở thư mục. Vui lòng mở thủ công: ' + outputs.out_dir)
+        }
+      } catch (error) {
+        console.error('Error opening folder:', error)
+        alert('Không thể mở thư mục. Vui lòng mở thủ công: ' + outputs.out_dir)
+      }
     }
   }
 
   const handleDownloadFile = (filePath) => {
     if (filePath) {
       // Download file via backend
-      window.open(`/api/download/${encodeURIComponent(filePath)}`, '_blank')
+      window.open(`/api/process/download/${encodeURIComponent(filePath)}`, '_blank')
     }
   }
 

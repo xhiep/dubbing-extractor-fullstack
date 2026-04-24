@@ -228,15 +228,54 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
             **filtered_options,
         )
 
-        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result}
+        # Convert result to dict format if it's a string (output directory path)
+        if isinstance(result, str):
+            from pathlib import Path
+            out_dir = Path(result)
+
+            # Find actual output files (they may have different names)
+            video_file = None
+            audio_file = None
+            srt_file = None
+
+            if out_dir.exists():
+                # Look for video files
+                for ext in ['.mp4', '.mkv', '.webm']:
+                    video_files = list(out_dir.glob(f'*{ext}'))
+                    if video_files:
+                        video_file = str(video_files[0])
+                        break
+
+                # Look for audio files
+                for ext in ['.mp3', '.wav', '.m4a']:
+                    audio_files = list(out_dir.glob(f'*{ext}'))
+                    if audio_files:
+                        audio_file = str(audio_files[0])
+                        break
+
+                # Look for subtitle files
+                srt_files = list(out_dir.glob('*.srt'))
+                if srt_files:
+                    srt_file = str(srt_files[0])
+
+            result_dict = {
+                "out_dir": str(out_dir),
+                "video_path": video_file,
+                "audio_path": audio_file,
+                "srt_path": srt_file,
+            }
+        else:
+            result_dict = result if isinstance(result, dict) else {}
+
+        _sync_tasks[task_id] = {"status": "completed", "progress": 100, "message": "Done", "result": result_dict}
 
         # Emit completion
         try:
-            asyncio.run(emit_completed(task_id, result))
+            asyncio.run(emit_completed(task_id, result_dict))
         except Exception as e:
             logger.error(f"Failed to emit completion: {e}")
 
-        return result
+        return result_dict
 
     except Exception as e:
         logger.error(f"Task {task_id} failed: {e}")

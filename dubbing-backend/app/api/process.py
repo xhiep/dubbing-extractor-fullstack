@@ -1,9 +1,15 @@
 """Video processing endpoints."""
 import logging
 import uuid
+import os
+import subprocess
+import platform
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from ..models.schemas import ProcessRequest, TaskResponse, StatusResponse, StepRequest
 from ..tasks import process_video_task, run_step_task, get_task_status, run_process_video_sync, run_step_sync, _sync_tasks
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -140,4 +146,78 @@ async def cancel_task(task_id: str):
 
     except Exception as e:
         logger.error(f"Failed to cancel task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download/{file_path:path}")
+async def download_file(file_path: str):
+    """Download a file from the output directory."""
+    try:
+        # Decode and resolve the file path
+        file_path = Path(file_path)
+
+        # Security check: ensure file is within output directory
+        output_dir = settings.OUTPUT_DIR.resolve()
+        resolved_path = file_path.resolve()
+
+        if not str(resolved_path).startswith(str(output_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        if not resolved_path.is_file():
+            raise HTTPException(status_code=400, detail="Not a file")
+
+        return FileResponse(
+            path=str(resolved_path),
+            filename=resolved_path.name,
+            media_type="application/octet-stream"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download file {file_path}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/open-folder")
+async def open_folder(request: dict):
+    """Open a folder in the system file explorer."""
+    try:
+        folder_path = request.get("folder_path")
+        if not folder_path:
+            raise HTTPException(status_code=400, detail="folder_path is required")
+
+        folder = Path(folder_path)
+
+        # Security check: ensure folder is within output directory
+        output_dir = settings.OUTPUT_DIR.resolve()
+        resolved_folder = folder.resolve()
+
+        if not str(resolved_folder).startswith(str(output_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not resolved_folder.exists():
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        if not resolved_folder.is_dir():
+            raise HTTPException(status_code=400, detail="Not a directory")
+
+        # Open folder based on OS
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(str(resolved_folder))
+        elif system == "Darwin":  # macOS
+            subprocess.run(["open", str(resolved_folder)])
+        else:  # Linux
+            subprocess.run(["xdg-open", str(resolved_folder)])
+
+        return {"message": "Folder opened successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to open folder {folder_path}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
