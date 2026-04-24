@@ -108,6 +108,9 @@ const PreviewCanvas = ({
   useEffect(() => {
     if (!imageUrl && !thumbnail) return
 
+    setImageLoaded(false)
+    imgRef.current = null
+
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.src = imageUrl || `/api/preview/thumbnail?url=${encodeURIComponent(thumbnail)}`
@@ -119,6 +122,11 @@ const PreviewCanvas = ({
 
     img.onerror = () => {
       console.error('Failed to load thumbnail for canvas')
+    }
+
+    return () => {
+      img.onload = null
+      img.onerror = null
     }
   }, [imageUrl, thumbnail])
 
