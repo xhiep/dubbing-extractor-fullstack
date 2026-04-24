@@ -190,7 +190,7 @@ def render_dubbed_outputs(
     ref_text: str,
     dub_volume: float = 1.35,
     source_volume: float = 0.18,
-    mix_mode: str = "nen_nho",
+    mix_mode: str = "ducking_thong_minh",
     output_video_name: str = "video_long_tieng.mp4",
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Path]:

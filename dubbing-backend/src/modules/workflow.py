@@ -484,7 +484,7 @@ def step7_dub(
     dub_ref_text: str = "",
     dub_voice_volume: float = 1.35,
     dub_source_volume: float = 0.18,
-    dub_mix_mode: str = "nen_nho",
+    dub_mix_mode: str = "ducking_thong_minh",
     output_video_name: str = "video_long_tieng.mp4",
     log_cb: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Path]:
@@ -505,7 +505,7 @@ def step7_dub(
         dub_ref_text: Reference text for voice cloning
         dub_voice_volume: Dubbed voice volume multiplier
         dub_source_volume: Original audio volume multiplier
-        dub_mix_mode: Mixing mode (nen_nho or tat_goc)
+        dub_mix_mode: Mixing mode (ducking_thong_minh, nen_nho, or tat_goc)
         output_video_name: Output video filename
         log_cb: Optional callback function for logging progress
 
@@ -574,7 +574,7 @@ def process_video(
     dub_ref_text: str = "",
     dub_voice_volume: float = 1.35,
     dub_source_volume: float = 0.18,
-    dub_mix_mode: str = "nen_nho",
+    dub_mix_mode: str = "ducking_thong_minh",
 ) -> Optional[str]:
     """Process video: download, transcribe, translate, and add subtitles.
 
@@ -1104,7 +1104,7 @@ def run_single_step(
                     dub_ref_text=options.get("dub_ref_text", ""),
                     dub_voice_volume=options.get("dub_voice_volume", 1.35),
                     dub_source_volume=options.get("dub_source_volume", 0.18),
-                    dub_mix_mode=options.get("dub_mix_mode", "nen_nho"),
+                    dub_mix_mode=options.get("dub_mix_mode", "ducking_thong_minh"),
                     output_video_name="video_sub_viet_long_tieng.mp4" if options.get("burn_subtitle", True) else "video_long_tieng.mp4",
                     log_cb=log_cb,
                 )

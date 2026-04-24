@@ -37,6 +37,15 @@ class ProcessRequest(BaseModel):
     enable_dub: bool = False
     enable_dubbing: bool = False
     tts_voice: str = "female_north"
+    dub_mode: Literal["preset", "clone"] = "preset"
+    dub_backend_mode: str = "turbo"
+    dub_remote_api_base: str = "http://localhost:23333/v1"
+    dub_preset_voice: str = ""
+    dub_ref_audio: str = ""
+    dub_ref_text: str = ""
+    dub_voice_volume: float = 1.35
+    dub_source_volume: float = 0.18
+    dub_mix_mode: Literal["ducking_thong_minh", "nen_nho", "tat_goc"] = "ducking_thong_minh"
 
     # Video options
     render_video_speed: float = 1.0
