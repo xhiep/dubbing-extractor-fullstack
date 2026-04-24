@@ -124,6 +124,73 @@
   - `render_video_speed` affects cover + subtitle timing + dubbing timeline
   - `output_video_speed` is final exported video speed relative to original
 
+## Flow Audit Summary
+- `SourceTab preview`
+  - uses backend `/api/preview` for metadata
+  - uses `/api/preview-render/layout` for real frame preview
+  - only uses source/layout-related options
+  - forces:
+    - `cover_mode = none`
+    - `burn_subtitle = false`
+    - `render_video_speed = 1.0`
+    - `video_speed = 1.0`
+  - does not use:
+    - whisper settings
+    - subtitle timing scale/offset
+    - dubbing settings
+    - output format
+- `AdjustTab render preview`
+  - uses `/api/preview-render/layout` then `/api/preview-render/render`
+  - uses cover/subtitle/layout/timeline options
+  - does not run Whisper or dubbing
+  - does not reflect full output container behavior
+  - `output_video_speed` is only partially represented compared with full render
+- `Step-by-step`
+  - sends full `processingOptions` inside `step_data.options`
+  - each step only consumes the relevant subset
+  - step 3 produces editable SRT
+  - steps 6-7 are where `output_format` matters most
+  - step 7 is where dub settings matter most
+- `Full render`
+  - `/api/process/` is the most complete end-to-end option path
+  - currently the best flow for checking true frontend/backend sync
+
+## Option Matrix Notes
+- Fully wired end-to-end in current code:
+  - `whisper_model`
+  - `whisper_language`
+  - `cover_mode`
+  - `cover_strength`
+  - `burn_subtitle`
+  - `srt_max_chars_per_line`
+  - `subtitle_font_scale`
+  - `subtitle_font_size`
+  - `subtitle_margin_px`
+  - `subtitle_timing_scale`
+  - `subtitle_offset_sec`
+  - `blur_padding_px`
+  - `cover_offset_px`
+  - `locked_subtitle_top_y`
+  - `locked_subtitle_bottom_y`
+  - `render_video_speed`
+  - `output_video_speed`
+  - `output_format`
+  - all current dubbing options
+- Legacy / special handling:
+  - `video_speed` is now mostly a fallback alias
+  - `mode` is flow-selection state, not a media-processing option
+  - `source` is passed separately into backend process functions
+  - `tts_voice` in backend schema is legacy and not used by current frontend dubbing flow
+
+## Latest Sync Fixes
+- Monolithic full render progress now emits real step progress instead of staying at `0.0%`
+- Whisper model/language selected in UI now override backend defaults during actual transcription
+- Output format selected in UI now affects final exported container (`mp4` / `mkv` / `webm`)
+- Process result picking prefers finalized output files instead of stale `.mp4` intermediates
+- Runtime directories now ignored in git:
+  - `dubbing-backend/outputs/`
+  - `storage/`
+
 ## Startup / Testing
 - Stop all:
   - `cmd /c stop_all.bat`
@@ -138,6 +205,12 @@
 - `de7a9b2` decoupled source and adjust backend previews
 - `baf61d6` cache preview source clips by source range
 - `75cf68a` add cache and temp cleanup controls
+- `49d3d1e` improve dubbing mix with smart ducking
+- `779127c` show smart ducking mix mode in dub ui
+- `a3424e4` sync dub request fields and mix defaults
+- `d1a430b` restore monolithic progress sync
+- `2d4dfe3` sync whisper overrides and output format
+- `6b17153` ignore runtime output directories
 
 ## Git / Workspace Notes
 - Repo may contain runtime folders not meant for commit:
