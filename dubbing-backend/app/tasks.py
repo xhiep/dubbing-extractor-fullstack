@@ -208,6 +208,14 @@ def run_process_video_sync(source: str, options: dict, mode: str, task_id: str):
         except Exception as e:
             logger.error(f"Failed to emit log: {e}")
 
+    # Map frontend parameter names to backend parameter names
+    if 'burn_subtitle' in options:
+        options['burn_sub'] = options.pop('burn_subtitle')
+    if 'cover_strength' in options:
+        options['blur_power'] = options.pop('cover_strength')
+    if 'enable_dubbing' in options:
+        options['enable_dub'] = options.pop('enable_dubbing')
+
     # Filter options to only valid process_video parameters
     valid_keys = {
         'cover_mode', 'burn_sub', 'subtitle_offset_sec',
