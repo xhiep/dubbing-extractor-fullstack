@@ -103,9 +103,19 @@ const AdjustTab = () => {
 
   useEffect(() => {
     setPreviewRenderUrl(null)
+    // Reset locked subtitle position when start time changes to force re-detection
+    updateProcessingOptions({
+      locked_subtitle_top_y: null,
+      locked_subtitle_bottom_y: null,
+    })
+  }, [
+    previewStartTime,
+  ])
+
+  useEffect(() => {
+    setPreviewRenderUrl(null)
   }, [
     previewText,
-    previewStartTime,
     previewDuration,
     processingOptions.cover_mode,
     processingOptions.cover_strength,
@@ -250,35 +260,57 @@ const AdjustTab = () => {
     setPreviewRenderLoading(true)
     setPreviewRenderUrl(null)
 
-    try {
-      const latestLayout = await fetchLatestPreviewLayout()
-      const subtitleBand = latestLayout?.subtitle_top_y != null && latestLayout?.subtitle_bottom_y != null
-        ? { topY: latestLayout.subtitle_top_y, bottomY: latestLayout.subtitle_bottom_y }
-        : getRepresentativeSubtitleBand(effectivePreview?.height || 1080)
+    let timeoutId = null
 
-      const response = await apiClient.post('/preview-render/render', {
-        source: processingOptions.source,
-        start_time: previewStartTime,
-        duration: previewDuration,
-        preview_text: previewText,
-        cover_mode: processingOptions.cover_mode,
-        cover_strength: processingOptions.cover_strength,
-        burn_subtitle: processingOptions.burn_subtitle,
-        subtitle_font_scale: processingOptions.subtitle_font_scale,
-        subtitle_font_size: processingOptions.subtitle_font_size,
-        subtitle_margin_px: processingOptions.subtitle_margin_px,
-        srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
-        blur_padding_px: processingOptions.blur_padding_px,
-        cover_offset_px: processingOptions.cover_offset_px,
-        preview_subtitle_top_y: subtitleBand.topY,
-        preview_subtitle_bottom_y: subtitleBand.bottomY,
-        render_video_speed: renderVideoSpeed,
-        output_video_speed: outputVideoSpeed,
-        video_speed: renderVideoSpeed,
+    try {
+      // Set timeout for 60 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Render preview timeout - vui lòng thử lại hoặc giảm duration'))
+        }, 60000)
       })
+
+      const renderPromise = (async () => {
+        const latestLayout = await fetchLatestPreviewLayout()
+        const subtitleBand = latestLayout?.subtitle_top_y != null && latestLayout?.subtitle_bottom_y != null
+          ? { topY: latestLayout.subtitle_top_y, bottomY: latestLayout.subtitle_bottom_y }
+          : getRepresentativeSubtitleBand(effectivePreview?.height || 1080)
+
+        const response = await apiClient.post('/preview-render/render', {
+          source: processingOptions.source,
+          start_time: previewStartTime,
+          duration: previewDuration,
+          preview_text: previewText,
+          cover_mode: processingOptions.cover_mode,
+          cover_strength: processingOptions.cover_strength,
+          burn_subtitle: processingOptions.burn_subtitle,
+          subtitle_font_scale: processingOptions.subtitle_font_scale,
+          subtitle_font_size: processingOptions.subtitle_font_size,
+          subtitle_margin_px: processingOptions.subtitle_margin_px,
+          srt_max_chars_per_line: processingOptions.srt_max_chars_per_line,
+          blur_padding_px: processingOptions.blur_padding_px,
+          cover_offset_px: processingOptions.cover_offset_px,
+          preview_subtitle_top_y: subtitleBand.topY,
+          preview_subtitle_bottom_y: subtitleBand.bottomY,
+          render_video_speed: renderVideoSpeed,
+          output_video_speed: outputVideoSpeed,
+          video_speed: renderVideoSpeed,
+        })
+
+        return response
+      })()
+
+      const response = await Promise.race([renderPromise, timeoutPromise])
+
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
 
       setPreviewRenderUrl(response.data.video_url)
     } catch (error) {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       console.error('Preview render failed:', error)
       alert(`Lỗi render preview: ${error.response?.data?.detail || error.message}`)
     } finally {
@@ -328,9 +360,17 @@ const AdjustTab = () => {
                 <input
                   type="number"
                   min="1"
+                  max={previewTotalDuration}
                   step="1"
                   value={previewStartTime}
-                  onChange={(e) => setPreviewStartTime(Math.max(1, parseFloat(e.target.value) || 1))}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value)
+                    if (isNaN(val)) {
+                      setPreviewStartTime(1)
+                    } else {
+                      setPreviewStartTime(Math.max(1, Math.min(previewTotalDuration, Math.floor(val))))
+                    }
+                  }}
                   className="input"
                 />
               </div>
@@ -344,7 +384,14 @@ const AdjustTab = () => {
                   max="8"
                   step="1"
                   value={previewDuration}
-                  onChange={(e) => setPreviewDuration(Math.min(8, Math.max(3, parseFloat(e.target.value) || 5)))}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value)
+                    if (isNaN(val)) {
+                      setPreviewDuration(5)
+                    } else {
+                      setPreviewDuration(Math.max(3, Math.min(8, Math.floor(val))))
+                    }
+                  }}
                   className="input"
                 />
               </div>
