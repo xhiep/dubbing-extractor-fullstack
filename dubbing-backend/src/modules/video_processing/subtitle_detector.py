@@ -175,8 +175,14 @@ def detect_sub_events(src: Path, w: int, h: int, log_cb: Optional[Callable[[str]
         _log("->  Khong doc duoc thoi luong video, bo qua che sub thong minh.")
         return []
 
-    t_start = max(0.0, duration * 0.03)
-    t_end = max(t_start + 0.5, duration * 0.97)
+    # For short clips (< 15s), scan from start to avoid missing subtitles
+    # For longer videos, skip first/last 3% to avoid intro/outro
+    if duration < 15.0:
+        t_start = 0.0
+        t_end = duration
+    else:
+        t_start = max(0.0, duration * 0.03)
+        t_end = max(t_start + 0.5, duration * 0.97)
     scan_dur = max(0.5, t_end - t_start)
     interval = _pick_cover_sample_interval(scan_dur)
     search_h = max(32, int(h * 0.40))
