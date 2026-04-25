@@ -494,6 +494,7 @@ def step7_dub(
     dub_mix_mode: str = "ducking_thong_minh",
     output_video_name: str = "video_long_tieng.mp4",
     log_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> Dict[str, Path]:
     """Dub video with Vietnamese voice using VieNeu-TTS.
 
@@ -543,6 +544,7 @@ def step7_dub(
         mix_mode=dub_mix_mode,
         output_video_name=output_video_name,
         log_cb=log_cb,
+        progress_cb=progress_cb,
     )
     _log(f"✓  Exported: {dubbed['dub_track'].name}")
     _log(f"✓  Exported: {dubbed['dub_video'].name}")
@@ -797,6 +799,7 @@ def process_video(
                 dub_mix_mode=dub_mix_mode,
                 output_video_name="video_sub_viet_long_tieng.mp4" if burn_sub else "video_long_tieng.mp4",
                 log_cb=log_cb,
+                progress_cb=progress_cb,
             )
             final_output_video = str(dubbed["dub_video"])
             _progress(7, 100, "Step 7 completed")

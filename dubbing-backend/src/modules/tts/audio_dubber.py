@@ -1,4 +1,4 @@
-"""Audio dubbing helpers using FFmpeg + VieNeu-TTS."""
+"""Audio dubbing helpers using FFmpeg + Multiple TTS Engines."""
 from __future__ import annotations
 
 import shutil
@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Callable, Dict, List
 
 from ..video_processing.ffmpeg_wrapper import ffmpeg_cmd, probe_duration, atempo_chain
-from .vieneu_engine import synthesize_speech
+from .tts_factory import TTSEngineFactory
 
 
 def _log(log_cb, msg: str):
@@ -55,34 +55,49 @@ def _fit_segment_duration(src: Path, dst: Path, target_duration: float, log_cb=N
 
 def _build_dub_track(segment_files: list[tuple[Path, float]], total_duration: float, out_path: Path, log_cb=None) -> Path:
     ff = ffmpeg_cmd()
-    cmd = [
-        ff,
-        "-y",
-        "-f", "lavfi",
-        "-i", "anullsrc=r=24000:cl=mono",
-    ]
-    for path, _start in segment_files:
-        cmd.extend(["-i", str(path)])
 
-    mix_inputs = ["[0:a]"]
-    filters = []
-    for idx, (_path, start_sec) in enumerate(segment_files, start=1):
-        delay_ms = max(0, int(round(start_sec * 1000)))
-        filters.append(f"[{idx}:a]adelay={delay_ms}|{delay_ms}[seg{idx}]")
-        mix_inputs.append(f"[seg{idx}]")
-    filters.append(
-        "".join(mix_inputs) +
-        f"amix=inputs={len(mix_inputs)}:duration=longest:dropout_transition=0:normalize=0,"
-        f"atrim=0:{max(total_duration, 0.1):.3f}[aout]"
-    )
-    cmd.extend([
-        "-filter_complex", ";".join(filters),
-        "-map", "[aout]",
-        "-ar", "24000",
-        "-ac", "1",
-        str(out_path),
-    ])
-    _run(cmd, log_cb)
+    # Write filter_complex to temp file to avoid Windows command line length limit
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+        mix_inputs = ["[0:a]"]
+        filters = []
+        for idx, (_path, start_sec) in enumerate(segment_files, start=1):
+            delay_ms = max(0, int(round(start_sec * 1000)))
+            filters.append(f"[{idx}:a]adelay={delay_ms}|{delay_ms}[seg{idx}]")
+            mix_inputs.append(f"[seg{idx}]")
+        filters.append(
+            "".join(mix_inputs) +
+            f"amix=inputs={len(mix_inputs)}:duration=longest:dropout_transition=0:normalize=0,"
+            f"atrim=0:{max(total_duration, 0.1):.3f}[aout]"
+        )
+        f.write(";".join(filters))
+        filter_file = f.name
+
+    try:
+        cmd = [
+            ff,
+            "-y",
+            "-f", "lavfi",
+            "-i", "anullsrc=r=24000:cl=mono",
+        ]
+        for path, _start in segment_files:
+            cmd.extend(["-i", str(path)])
+
+        cmd.extend([
+            "-filter_complex_script", filter_file,
+            "-map", "[aout]",
+            "-ar", "24000",
+            "-ac", "1",
+            str(out_path),
+        ])
+        _run(cmd, log_cb)
+    finally:
+        # Clean up temp file
+        try:
+            Path(filter_file).unlink()
+        except:
+            pass
+
     return out_path
 
 
@@ -182,17 +197,23 @@ def render_dubbed_outputs(
     video_path: Path,
     segments: list[dict],
     out_dir: Path,
-    mode: str,
-    engine_mode: str,
-    remote_api_base: str,
-    preset_voice: str,
-    ref_audio: str,
-    ref_text: str,
+    tts_engine: str = "f5tts",
+    mode: str = "preset",
+    engine_mode: str = "turbo",
+    remote_api_base: str = "",
+    preset_voice: str = "",
+    ref_audio: str = "",
+    ref_text: str = "",
     dub_volume: float = 1.35,
     source_volume: float = 0.18,
     mix_mode: str = "ducking_thong_minh",
     output_video_name: str = "video_long_tieng.mp4",
+    f5tts_model: str = "F5TTS_Base",
+    f5tts_ckpt_file: str = "",
+    f5tts_vocab_file: str = "",
+    f5tts_speed: float = 1.0,
     log_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> Dict[str, Path]:
     """Render dubbed video with Vietnamese TTS audio mixed with original.
 
@@ -204,16 +225,21 @@ def render_dubbed_outputs(
         video_path: Path to source video file
         segments: List of subtitle segments with text and timing
         out_dir: Output directory for dubbed files
-        mode: Voice mode (preset or clone)
-        engine_mode: TTS backend mode (turbo, turbo_gpu, fast, remote)
-        remote_api_base: API base URL for remote mode
-        preset_voice: Name of preset voice
+        tts_engine: TTS engine to use (vieneu or f5tts)
+        mode: Voice mode (preset or clone) - VieNeu only
+        engine_mode: TTS backend mode (turbo, turbo_gpu, fast, remote) - VieNeu only
+        remote_api_base: API base URL for remote mode - VieNeu only
+        preset_voice: Name of preset voice - VieNeu only
         ref_audio: Path to reference audio for voice cloning
         ref_text: Reference text for voice cloning
         dub_volume: Dubbed voice volume multiplier
         source_volume: Original audio volume multiplier
         mix_mode: Mixing mode (nen_nho, tat_goc, ducking_thong_minh)
         output_video_name: Output video filename
+        f5tts_model: F5-TTS model name
+        f5tts_ckpt_file: F5-TTS checkpoint file
+        f5tts_vocab_file: F5-TTS vocabulary file
+        f5tts_speed: F5-TTS speech speed
         log_cb: Optional callback function for logging progress
 
     Returns:
@@ -243,23 +269,37 @@ def render_dubbed_outputs(
         end = max(start + 0.1, float(seg.get("end", 0.0) or 0.0))
         raw_wav = dub_dir / f"seg_{index:04d}_raw.wav"
         fit_wav = dub_dir / f"seg_{index:04d}.wav"
-        _log(log_cb, f"->  TTS cau {index}/{len(segments)}")
-        synthesize_speech(
+        _log(log_cb, f"->  TTS cau {index}/{len(segments)} [{tts_engine}]")
+
+        # Update progress: 30% base + 60% for TTS processing
+        if progress_cb:
+            progress_percent = 30 + int((index / len(segments)) * 60)
+            progress_cb(7, progress_percent, f"TTS câu {index}/{len(segments)}")
+
+        # Use TTS factory to synthesize with selected engine
+        TTSEngineFactory.synthesize(
             text=text,
             out_path=raw_wav,
-            mode=mode,
-            engine_mode=engine_mode,
-            remote_api_base=remote_api_base,
-            preset_voice=preset_voice,
+            engine=tts_engine,
             ref_audio=ref_audio,
             ref_text=ref_text,
             log_cb=log_cb,
+            # VieNeu-specific params
+            mode=mode,
+            preset_voice=preset_voice,
+            engine_mode=engine_mode,
+            remote_api_base=remote_api_base,
+            # F5-TTS-specific params
+            f5tts_model=f5tts_model,
+            f5tts_ckpt_file=f5tts_ckpt_file,
+            f5tts_vocab_file=f5tts_vocab_file,
+            f5tts_speed=f5tts_speed,
         )
         _fit_segment_duration(raw_wav, fit_wav, end - start, log_cb)
         placements.append((fit_wav, start))
 
     if not placements:
-        raise RuntimeError("VieNeu khong tao duoc doan audio nao.")
+        raise RuntimeError(f"TTS engine '{tts_engine}' khong tao duoc doan audio nao.")
 
     total_duration = max(probe_duration(video_path), max(start + probe_duration(path) for path, start in placements))
     dub_track = out_dir / "audio_long_tieng.wav"
