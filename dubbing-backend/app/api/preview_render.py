@@ -28,6 +28,7 @@ def _preview_source_key(source: str, start_time: float, duration: float) -> str:
         "source": (source or "").strip(),
         "start_time": round(float(start_time or 0.0), 3),
         "duration": round(float(duration or 0.0), 3),
+        "detector_version": "v2_short_clip_fix",  # Bump this when detection logic changes
     }, ensure_ascii=True, sort_keys=True)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
