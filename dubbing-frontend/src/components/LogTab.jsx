@@ -11,10 +11,10 @@ const LogTab = () => {
   }, [logs])
 
   const levelColors = {
-    debug: 'text-dark-400',
-    info: 'text-blue-400',
-    warning: 'text-yellow-400',
-    error: 'text-red-400',
+    debug: 'text-apple-gray-secondary',
+    info: 'text-apple-blue',
+    warning: 'text-yellow-600',
+    error: 'text-red-600',
   }
 
   const levelIcons = {
@@ -25,15 +25,15 @@ const LogTab = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Log controls */}
       <div className="card flex items-center justify-between">
-        <div className="text-sm text-dark-400">
+        <div className="text-control text-apple-gray-secondary">
           {logs.length} log entries
         </div>
         <button
           onClick={() => useAppStore.getState().clearLogs()}
-          className="btn btn-secondary text-sm"
+          className="btn btn-secondary rounded-apple-md px-6 py-2"
         >
           Clear Logs
         </button>
@@ -41,22 +41,22 @@ const LogTab = () => {
 
       {/* Log viewer */}
       <div className="card">
-        <div className="bg-dark-900 rounded-lg p-4 h-[600px] overflow-y-auto font-mono text-sm">
+        <div className="bg-apple-black rounded-apple-lg p-5 h-[600px] overflow-y-auto font-mono text-control">
           {logs.length === 0 ? (
-            <div className="text-center text-dark-400 py-8">
+            <div className="text-center text-apple-gray-secondary py-12">
               No logs yet. Start processing to see logs here.
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {logs.map((log, index) => (
                 <div
                   key={index}
-                  className={`flex items-start gap-2 ${levelColors[log.level]}`}
+                  className={`flex items-start gap-3 ${levelColors[log.level]}`}
                 >
                   <span className="flex-shrink-0">
                     {levelIcons[log.level]}
                   </span>
-                  <span className="text-dark-500 flex-shrink-0">
+                  <span className="text-apple-gray-secondary flex-shrink-0 min-w-[80px]">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
                   <span className="flex-1 break-words">
@@ -72,23 +72,23 @@ const LogTab = () => {
 
       {/* Log legend */}
       <div className="card">
-        <h3 className="text-sm font-medium text-dark-400 mb-2">Log Levels:</h3>
-        <div className="flex gap-4 text-sm">
-          <div className="flex items-center gap-1">
+        <h3 className="text-body-emphasis text-apple-ink mb-4">Log Levels:</h3>
+        <div className="flex flex-wrap gap-6 text-control">
+          <div className="flex items-center gap-2">
             <span>🔍</span>
-            <span className="text-dark-400">Debug</span>
+            <span className="text-apple-gray-secondary">Debug</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <span>ℹ️</span>
-            <span className="text-blue-400">Info</span>
+            <span className="text-apple-blue">Info</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <span>⚠️</span>
-            <span className="text-yellow-400">Warning</span>
+            <span className="text-yellow-600">Warning</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <span>❌</span>
-            <span className="text-red-400">Error</span>
+            <span className="text-red-600">Error</span>
           </div>
         </div>
       </div>

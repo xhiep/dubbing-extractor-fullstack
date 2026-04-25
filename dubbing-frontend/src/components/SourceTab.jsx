@@ -4,12 +4,14 @@ import useAppStore from '../store/appStore'
 import { usePreview } from '../hooks/useProcessing'
 import { apiClient } from '../api/client'
 import PreviewCanvas from './PreviewCanvas'
+import StepByStepPanel from './StepByStepPanel'
 
 const SOURCE_PREVIEW_START = 1
 const SOURCE_PREVIEW_DURATION = 3
 
 const SourceTab = () => {
   const { processingOptions, updateProcessingOptions, setPreview } = useAppStore()
+  const isStepByStepMode = processingOptions.mode === 'step-by-step'
   const [sourceInput, setSourceInput] = useState(processingOptions.source)
   const [showPreview, setShowPreview] = useState(false)
   const [backendPreview, setBackendPreview] = useState(null)
@@ -110,13 +112,15 @@ const SourceTab = () => {
 
   return (
     <div className="space-y-8">
+      {isStepByStepMode && <StepByStepPanel />}
+
       <div className="card">
-        <h2 className="text-utility font-sf-display text-apple-ink mb-6">Nguon Video</h2>
+        <h2 className="text-utility font-sf-display text-apple-ink mb-6">Nguồn Video</h2>
 
         <div className="space-y-5">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              URL hoac duong dan file local
+              URL hoặc đường dẫn file local
             </label>
             <div className="flex gap-3">
               <div className="relative flex-1">
@@ -131,7 +135,7 @@ const SourceTab = () => {
                   type="text"
                   value={sourceInput}
                   onChange={handleSourceChange}
-                  placeholder="https://youtube.com/watch?v=... hoac C:\\path\\to\\video.mp4"
+                  placeholder="https://youtube.com/watch?v=... hoặc C:\\path\\to\\video.mp4"
                   className="input pl-12 py-3"
                 />
               </div>
@@ -152,7 +156,7 @@ const SourceTab = () => {
           {showPreview && (isLoading || backendPreviewLoading) && (
             <div className="notice-info rounded-apple-xl p-5">
               <p className="text-blue-600 text-control font-medium">
-                Dang tai metadata va frame backend 1-3s dau...
+                Đang tải metadata và frame backend 1–3s đầu...
               </p>
             </div>
           )}
@@ -180,7 +184,7 @@ const SourceTab = () => {
                   ) : (
                     <div className="text-center px-6 text-apple-gray-secondary">
                       <Loader2 className="h-8 w-8 mx-auto mb-3 animate-spin opacity-70" />
-                      <p className="text-control">Dang lay frame preview tu backend...</p>
+                      <p className="text-control">Đang lấy frame preview từ backend...</p>
                     </div>
                   )}
                 </div>
@@ -193,7 +197,7 @@ const SourceTab = () => {
                     <p>Platform: {preview.platform}</p>
                     <p>Duration: {Math.floor(preview.duration / 60)}:{String(Math.floor(preview.duration % 60)).padStart(2, '0')}</p>
                     <p>Resolution: {preview.width}x{preview.height}</p>
-                    <p>Backend preview: clip {SOURCE_PREVIEW_START}-{SOURCE_PREVIEW_START + SOURCE_PREVIEW_DURATION}s, khong lay overlay tu tab khac.</p>
+                    <p>Backend preview: clip {SOURCE_PREVIEW_START}–{SOURCE_PREVIEW_START + SOURCE_PREVIEW_DURATION}s, không lấy overlay từ tab khác.</p>
                     {backendPreviewError && <p className="text-red-600">{backendPreviewError}</p>}
                   </div>
                 </div>
@@ -212,7 +216,7 @@ const SourceTab = () => {
       </div>
 
       <div className="card">
-        <h2 className="text-utility font-sf-display text-apple-ink mb-6">Che Do Xu Ly</h2>
+        <h2 className="text-utility font-sf-display text-apple-ink mb-6">Chế Độ Xử Lý</h2>
 
         <div className="space-y-4">
           <label className="option-card flex items-start gap-4 p-5 rounded-apple-xl cursor-pointer transition-all">
@@ -225,9 +229,9 @@ const SourceTab = () => {
               className="mt-1 w-4 h-4 accent-apple-blue"
             />
             <div className="flex-1">
-              <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Monolithic (tu dong)</div>
+              <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Monolithic (tự động)</div>
               <div className="text-control text-apple-gray-secondary leading-relaxed">
-                Chay toan bo pipeline mot lan, khong can can thiep.
+                Chạy toàn bộ pipeline một lần, không cần can thiệp.
               </div>
             </div>
           </label>
@@ -242,9 +246,9 @@ const SourceTab = () => {
               className="mt-1 w-4 h-4 accent-apple-blue"
             />
             <div className="flex-1">
-              <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Step-by-Step (thu cong)</div>
+              <div className="font-semibold text-body-emphasis text-apple-ink mb-1">Step-by-Step (thủ công)</div>
               <div className="text-control text-apple-gray-secondary leading-relaxed">
-                Chay tung buoc rieng, co the chinh SRT va tham so giua chung.
+                Chạy từng bước riêng, có thể chỉnh SRT và tham số giữa chúng.
               </div>
             </div>
           </label>

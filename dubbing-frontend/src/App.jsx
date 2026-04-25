@@ -11,7 +11,6 @@ import DubTab from './components/DubTab'
 import LogTab from './components/LogTab'
 import StatusBar from './components/StatusBar'
 import ProgressBar from './components/ProgressBar'
-import StepByStepPanel from './components/StepByStepPanel'
 import OutputPanel from './components/OutputPanel'
 
 function App() {
@@ -96,7 +95,7 @@ function App() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
-              <h1 className="text-promo font-sf-display text-apple-ink leading-tight">
+              <h1 className="text-promo font-sf-display text-apple-ink leading-tight font-semibold">
                 Dubbing Extractor v3
               </h1>
               <p className="text-control text-apple-gray-secondary">
@@ -198,12 +197,6 @@ function App() {
 
       <main className="py-8 px-8">
         <div className="max-w-7xl mx-auto">
-          {isStepByStepMode && (
-            <div className="mb-8">
-              <StepByStepPanel />
-            </div>
-          )}
-
           {activeTab === 'source' && <SourceTab />}
           {activeTab === 'adjust' && <AdjustTab />}
           {activeTab === 'dub' && <DubTab />}

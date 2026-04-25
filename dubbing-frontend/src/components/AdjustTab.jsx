@@ -4,6 +4,8 @@ import useAppStore from '../store/appStore'
 import { usePreview } from '../hooks/useProcessing'
 import { apiClient } from '../api/client'
 import PreviewCanvas, { getRepresentativeSubtitleBand } from './PreviewCanvas'
+import SectionCard from './ui/SectionCard'
+import SliderField from './ui/SliderField'
 
 const SUBTITLE_PRESETS = {
   custom: null,
@@ -49,16 +51,9 @@ const SUBTITLE_PRESETS = {
   },
 }
 
-const SectionCard = ({ title, children }) => (
-  <div className="card">
-    <h2 className="text-utility font-sf-display text-apple-ink mb-6">{title}</h2>
-    <div className="space-y-5">{children}</div>
-  </div>
-)
-
 const AdjustTab = () => {
   const { processingOptions, updateProcessingOptions, outputs, preview } = useAppStore()
-  const [previewText, setPreviewText] = useState('Dong phu de mau so 1\nDong phu de mau so 2')
+  const [previewText, setPreviewText] = useState('Dòng phụ đề mẫu số 1\nDòng phụ đề mẫu số 2')
   const [subtitlePreset, setSubtitlePreset] = useState('default')
   const [previewRenderLoading, setPreviewRenderLoading] = useState(false)
   const [previewRenderUrl, setPreviewRenderUrl] = useState(null)
@@ -248,7 +243,7 @@ const AdjustTab = () => {
 
   const handleRenderPreview = async () => {
     if (!processingOptions.source) {
-      alert('Vui long nhap URL video o tab Nguon Video')
+      alert('Vui lòng nhập URL video ở tab Nguồn Video')
       return
     }
 
@@ -285,7 +280,7 @@ const AdjustTab = () => {
       setPreviewRenderUrl(response.data.video_url)
     } catch (error) {
       console.error('Preview render failed:', error)
-      alert(`Loi render preview: ${error.response?.data?.detail || error.message}`)
+      alert(`Lỗi render preview: ${error.response?.data?.detail || error.message}`)
     } finally {
       setPreviewRenderLoading(false)
     }
@@ -293,13 +288,15 @@ const AdjustTab = () => {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] gap-8 items-start">
+
+      {/* ── Cột trái: Preview (sticky) ── */}
       <div className="xl:sticky xl:top-28 space-y-6">
         <div className="card">
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end">
             <div className="flex-1">
               <h2 className="text-utility font-sf-display text-apple-ink">Video Preview</h2>
               <p className="mt-2 text-control text-apple-gray-secondary">
-                Tab nay tu lay frame preview tu backend. Khong can bam preview o tab Nguon truoc.
+                Tab này tự lấy frame preview từ backend. Không cần bấm preview ở tab Nguồn trước.
               </p>
             </div>
             <button
@@ -310,7 +307,7 @@ const AdjustTab = () => {
               {previewRenderLoading ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Dang render...
+                  Đang render...
                 </>
               ) : (
                 <>
@@ -321,11 +318,12 @@ const AdjustTab = () => {
             </button>
           </div>
 
+          {/* Timeline controls */}
           <div className="surface-subtle rounded-apple-lg px-4 py-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
               <div>
                 <label className="block text-control font-medium text-apple-gray-secondary mb-2">
-                  Start Time (giay)
+                  Start Time (giây)
                 </label>
                 <input
                   type="number"
@@ -338,7 +336,7 @@ const AdjustTab = () => {
               </div>
               <div>
                 <label className="block text-control font-medium text-apple-gray-secondary mb-2">
-                  Duration (backend clip 3-8s)
+                  Duration (backend clip 3–8s)
                 </label>
                 <input
                   type="number"
@@ -360,7 +358,7 @@ const AdjustTab = () => {
               <div className="mb-2 flex items-center justify-between gap-4">
                 <p className="text-control font-medium text-apple-ink">Timeline Preview</p>
                 <p className="text-micro text-apple-gray-secondary">
-                  Chon moc timeline roi render backend clip ngan tai moc do.
+                  Chọn mốc timeline rồi render backend clip ngắn tại mốc đó.
                 </p>
               </div>
               <input
@@ -376,6 +374,7 @@ const AdjustTab = () => {
             </div>
           </div>
 
+          {/* Preview canvas */}
           <div className="bg-apple-black rounded-apple-xl overflow-hidden aspect-video flex items-center justify-center relative">
             {previewRenderUrl ? (
               <video
@@ -385,7 +384,7 @@ const AdjustTab = () => {
                 className="w-full h-full object-contain"
                 src={previewRenderUrl}
               >
-                Video khong duoc ho tro
+                Video không được hỗ trợ
               </video>
             ) : previewLayout?.image_url ? (
               <PreviewCanvas
@@ -412,22 +411,18 @@ const AdjustTab = () => {
             ) : processingOptions.source && (previewLayoutLoading || effectivePreview) ? (
               <div className="text-apple-gray-secondary text-center px-6">
                 <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin opacity-70" />
-                <p className="text-control">Dang tao frame preview tu backend...</p>
-                <p className="text-micro mt-1">Frame nay duoc cap nhat doc lap voi tab Nguon Video.</p>
+                <p className="text-control">Đang tạo frame preview từ backend...</p>
+                <p className="text-micro mt-1">Frame này được cập nhật độc lập với tab Nguồn Video.</p>
               </div>
             ) : outputs.video_path ? (
-              <video
-                ref={videoRef}
-                controls
-                className="w-full h-full object-contain"
-              >
-                Video khong duoc ho tro
+              <video ref={videoRef} controls className="w-full h-full object-contain">
+                Video không được hỗ trợ
               </video>
             ) : (
               <div className="text-apple-gray-secondary text-center px-6">
                 <FileVideo className="w-16 h-16 mx-auto mb-3 opacity-50" />
-                <p className="text-control">Video preview se hien thi o day</p>
-                <p className="text-micro mt-1">Nhap URL o tab Nguon Video va backend se tu tao frame preview.</p>
+                <p className="text-control">Video preview sẽ hiển thị ở đây</p>
+                <p className="text-micro mt-1">Nhập URL ở tab Nguồn Video và backend sẽ tự tạo frame preview.</p>
               </div>
             )}
           </div>
@@ -435,7 +430,7 @@ const AdjustTab = () => {
           {previewRenderLoading && (
             <div className="notice-info rounded-apple-xl p-4 mt-4">
               <p className="text-blue-600 text-control font-medium">
-                Dang render preview video voi blur va subtitle...
+                Đang render preview video với blur và subtitle...
               </p>
             </div>
           )}
@@ -443,11 +438,12 @@ const AdjustTab = () => {
           {previewLayoutLoading && !previewRenderLoading && (
             <div className="notice-info rounded-apple-xl p-4 mt-4">
               <p className="text-blue-600 text-control font-medium">
-                Dang dong bo frame preview that tu backend...
+                Đang đồng bộ frame preview thật từ backend...
               </p>
             </div>
           )}
 
+          {/* Preview text + reset */}
           <div className="mt-4">
             <label className="block text-control font-medium text-apple-gray-secondary mb-2">
               Preview Text
@@ -455,7 +451,7 @@ const AdjustTab = () => {
             <textarea
               value={previewText}
               onChange={(e) => setPreviewText(e.target.value)}
-              placeholder="Nhap text de xem preview subtitle..."
+              placeholder="Nhập text để xem preview subtitle..."
               rows={4}
               className="input resize-none"
             />
@@ -466,7 +462,7 @@ const AdjustTab = () => {
                 className="btn btn-secondary px-4 py-2 rounded-apple-md flex items-center gap-2"
               >
                 <RotateCcw className="h-4 w-4" />
-                Reset Vi Tri
+                Reset Vị Trí
               </button>
               <button
                 type="button"
@@ -478,13 +474,15 @@ const AdjustTab = () => {
               </button>
             </div>
             <p className="text-micro text-apple-gray-secondary mt-3">
-              Keo truc tiep subtitle tren khung preview de can vi tri doc truoc khi render.
+              Kéo trực tiếp subtitle trên khung preview để căn vị trí độc trước khi render.
             </p>
           </div>
         </div>
       </div>
 
+      {/* ── Cột phải: Controls ── */}
       <div className="space-y-6">
+
         <SectionCard title="Whisper Transcription">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
@@ -495,17 +493,17 @@ const AdjustTab = () => {
               onChange={(e) => updateProcessingOptions({ whisper_model: e.target.value })}
               className="input"
             >
-              <option value="tiny">Tiny (nhanh nhat, kem chinh xac nhat)</option>
+              <option value="tiny">Tiny (nhanh nhất, kém chính xác nhất)</option>
               <option value="base">Base</option>
               <option value="small">Small</option>
-              <option value="medium">Medium (khuyen dung)</option>
-              <option value="large">Large (cham nhat, chinh xac nhat)</option>
+              <option value="medium">Medium (khuyến dùng)</option>
+              <option value="large">Large (chậm nhất, chính xác nhất)</option>
             </select>
           </div>
 
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Language (de trong de auto-detect)
+              Language (để trống để auto-detect)
             </label>
             <input
               type="text"
@@ -517,7 +515,7 @@ const AdjustTab = () => {
           </div>
         </SectionCard>
 
-        <SectionCard title="Che Phu De Goc">
+        <SectionCard title="Che Phủ Đề Gốc">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
               Cover Mode
@@ -534,53 +532,38 @@ const AdjustTab = () => {
           </div>
 
           {processingOptions.cover_mode === 'blur' && (
-            <div>
-              <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-                Blur Strength: {processingOptions.cover_strength}
-              </label>
-              <input
-                type="range"
-                min="5"
-                max="30"
-                value={processingOptions.cover_strength}
-                onChange={(e) => updateProcessingOptions({ cover_strength: parseInt(e.target.value, 10) })}
-                className="w-full accent-apple-blue"
-              />
-            </div>
+            <SliderField
+              label="Blur Strength"
+              value={processingOptions.cover_strength}
+              min={5}
+              max={30}
+              step={1}
+              onChange={(v) => updateProcessingOptions({ cover_strength: Math.round(v) })}
+            />
           )}
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Blur Padding: {processingOptions.blur_padding_px}px
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="200"
-              step="2"
-              value={processingOptions.blur_padding_px}
-              onChange={(e) => updateProcessingOptions({ blur_padding_px: parseInt(e.target.value, 10) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Blur Padding"
+            value={processingOptions.blur_padding_px}
+            unit="px"
+            min={0}
+            max={200}
+            step={2}
+            onChange={(v) => updateProcessingOptions({ blur_padding_px: Math.round(v) })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Cover Offset: {processingOptions.cover_offset_px}px
-            </label>
-            <input
-              type="range"
-              min="-240"
-              max="240"
-              step="2"
-              value={processingOptions.cover_offset_px}
-              onChange={(e) => updateProcessingOptions({ cover_offset_px: parseInt(e.target.value, 10) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Cover Offset"
+            value={processingOptions.cover_offset_px}
+            unit="px"
+            min={-240}
+            max={240}
+            step={2}
+            onChange={(v) => updateProcessingOptions({ cover_offset_px: Math.round(v) })}
+          />
         </SectionCard>
 
-        <SectionCard title="Phu De">
+        <SectionCard title="Phụ Đề">
           <div>
             <label className="block text-control font-medium text-apple-gray-secondary mb-3">
               Subtitle Preset
@@ -590,12 +573,12 @@ const AdjustTab = () => {
               onChange={(e) => applyPreset(e.target.value)}
               className="input"
             >
-              <option value="custom">Tuy chinh</option>
-              <option value="default">Mac dinh</option>
-              <option value="large">Chu lon</option>
-              <option value="compact">Gon</option>
+              <option value="custom">Tùy chỉnh</option>
+              <option value="default">Mặc định</option>
+              <option value="large">Chữ lớn</option>
+              <option value="compact">Gọn</option>
               <option value="tiktok">TikTok</option>
-              <option value="anime">Kieu Anime</option>
+              <option value="anime">Kiểu Anime</option>
             </select>
           </div>
 
@@ -606,149 +589,102 @@ const AdjustTab = () => {
               onChange={(e) => updateProcessingOptions({ burn_subtitle: e.target.checked })}
               className="w-4 h-4 accent-apple-blue"
             />
-            <span className="text-body text-apple-ink font-medium">Burn subtitle vao video</span>
+            <span className="text-body text-apple-ink font-medium">Burn subtitle vào video</span>
           </label>
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Font Scale: {processingOptions.subtitle_font_scale.toFixed(1)}x
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2.5"
-              step="0.1"
-              value={processingOptions.subtitle_font_scale}
-              onChange={(e) => updateProcessingOptions({ subtitle_font_scale: parseFloat(e.target.value) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Font Scale"
+            value={processingOptions.subtitle_font_scale}
+            displayValue={`${processingOptions.subtitle_font_scale.toFixed(1)}x`}
+            min={0.5}
+            max={2.5}
+            step={0.1}
+            onChange={(v) => updateProcessingOptions({ subtitle_font_scale: v })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Font Size: {processingOptions.subtitle_font_size === 0 ? 'Auto' : `${processingOptions.subtitle_font_size}px`}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="96"
-              step="1"
-              value={processingOptions.subtitle_font_size}
-              onChange={(e) => updateProcessingOptions({ subtitle_font_size: parseInt(e.target.value, 10) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Font Size"
+            value={processingOptions.subtitle_font_size}
+            displayValue={processingOptions.subtitle_font_size === 0 ? 'Auto' : `${processingOptions.subtitle_font_size}px`}
+            min={0}
+            max={96}
+            step={1}
+            onChange={(v) => updateProcessingOptions({ subtitle_font_size: Math.round(v) })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Vertical Offset: {processingOptions.subtitle_margin_px}px
-            </label>
-            <input
-              type="range"
-              min="-240"
-              max="240"
-              step="4"
-              value={processingOptions.subtitle_margin_px}
-              onChange={(e) => updateProcessingOptions({ subtitle_margin_px: parseInt(e.target.value, 10) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Vertical Offset"
+            value={processingOptions.subtitle_margin_px}
+            unit="px"
+            min={-240}
+            max={240}
+            step={4}
+            onChange={(v) => updateProcessingOptions({ subtitle_margin_px: Math.round(v) })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Max Chars Per Line: {processingOptions.srt_max_chars_per_line}
-            </label>
-            <input
-              type="range"
-              min="20"
-              max="80"
-              step="1"
-              value={processingOptions.srt_max_chars_per_line}
-              onChange={(e) => updateProcessingOptions({ srt_max_chars_per_line: parseInt(e.target.value, 10) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Max Chars Per Line"
+            value={processingOptions.srt_max_chars_per_line}
+            min={20}
+            max={80}
+            step={1}
+            onChange={(v) => updateProcessingOptions({ srt_max_chars_per_line: Math.round(v) })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Timing Scale: {processingOptions.subtitle_timing_scale.toFixed(1)}x
-            </label>
-            <input
-              type="range"
-              min="0.8"
-              max="1.2"
-              step="0.05"
-              value={processingOptions.subtitle_timing_scale}
-              onChange={(e) => updateProcessingOptions({ subtitle_timing_scale: parseFloat(e.target.value) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Timing Scale"
+            value={processingOptions.subtitle_timing_scale}
+            displayValue={`${processingOptions.subtitle_timing_scale.toFixed(1)}x`}
+            min={0.8}
+            max={1.2}
+            step={0.05}
+            onChange={(v) => updateProcessingOptions({ subtitle_timing_scale: v })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Offset (seconds): {processingOptions.subtitle_offset_sec.toFixed(2)}s
-            </label>
-            <input
-              type="range"
-              min="-5"
-              max="5"
-              step="0.1"
-              value={processingOptions.subtitle_offset_sec}
-              onChange={(e) => updateProcessingOptions({ subtitle_offset_sec: parseFloat(e.target.value) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Offset"
+            value={processingOptions.subtitle_offset_sec}
+            displayValue={`${processingOptions.subtitle_offset_sec.toFixed(2)}s`}
+            min={-5}
+            max={5}
+            step={0.1}
+            onChange={(v) => updateProcessingOptions({ subtitle_offset_sec: v })}
+          />
         </SectionCard>
 
         <SectionCard title="Video">
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Render Speed: {renderVideoSpeed.toFixed(1)}x
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={renderVideoSpeed}
-              onChange={(e) => {
-                const value = parseFloat(e.target.value)
-                updateProcessingOptions({
-                  render_video_speed: value,
-                  video_speed: value,
-                })
-              }}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Render Speed"
+            value={renderVideoSpeed}
+            displayValue={`${renderVideoSpeed.toFixed(1)}x`}
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            onChange={(v) => updateProcessingOptions({ render_video_speed: v, video_speed: v })}
+          />
 
-          <div>
-            <label className="block text-control font-medium text-apple-gray-secondary mb-3">
-              Output Speed: {outputVideoSpeed.toFixed(1)}x so voi video goc
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={outputVideoSpeed}
-              onChange={(e) => updateProcessingOptions({ output_video_speed: parseFloat(e.target.value) })}
-              className="w-full accent-apple-blue"
-            />
-          </div>
+          <SliderField
+            label="Output Speed"
+            value={outputVideoSpeed}
+            displayValue={`${outputVideoSpeed.toFixed(1)}x so với video gốc`}
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            onChange={(v) => updateProcessingOptions({ output_video_speed: v })}
+          />
 
           <div className="surface-subtle rounded-apple-lg p-4 space-y-2">
             <p className="text-control font-medium text-apple-ink">
-              Render = toc do dung cho cover + subtitle timing + long tieng
+              Render = tốc độ dùng cho cover + subtitle timing + lồng tiếng
             </p>
             <p className="text-control text-apple-gray-secondary">
-              Output = toc do file xuat cuoi cung so voi video goc.
+              Output = tốc độ file xuất cuối cùng so với video gốc.
             </p>
             <p className="text-control text-apple-gray-secondary">
-              He so retime cuoi: {outputVideoSpeed.toFixed(2)} / {renderVideoSpeed.toFixed(2)} = {exportVsRenderFactor.toFixed(2)}x
+              Hệ số retime cuối: {outputVideoSpeed.toFixed(2)} / {renderVideoSpeed.toFixed(2)} = {exportVsRenderFactor.toFixed(2)}x
             </p>
             <p className="text-micro text-apple-gray-secondary">
-              Vi du: render 0.8x + output 1.0x nghia la pipeline xu ly va long tieng tren timeline cham hon, sau do file cuoi duoc dua ve toc do goc 1.0x.
+              Ví dụ: render 0.8x + output 1.0x nghĩa là pipeline xử lý và lồng tiếng trên timeline chậm hơn, sau đó file cuối được đưa về tốc độ gốc 1.0x.
             </p>
           </div>
 
@@ -767,6 +703,7 @@ const AdjustTab = () => {
             </select>
           </div>
         </SectionCard>
+
       </div>
     </div>
   )

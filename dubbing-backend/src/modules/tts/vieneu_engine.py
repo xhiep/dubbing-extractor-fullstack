@@ -109,15 +109,56 @@ def _build_engine_kwargs(
     return kwargs
 
 
+def _check_mode_requirements(engine_mode: str) -> None:
+    """Raise RuntimeError sớm nếu mode không thoả điều kiện môi trường."""
+    import os
+
+    if engine_mode == "fast" and os.name == "nt":
+        raise RuntimeError(
+            "Backend 'fast' (LMDeploy) không hỗ trợ Windows do thiếu Triton compiler. "
+            "Hãy chọn 'turbo_gpu' để dùng GPU trên Windows."
+        )
+
+    if engine_mode in ("turbo_gpu", "xpu"):
+        try:
+            import torch
+            if engine_mode == "turbo_gpu" and not torch.cuda.is_available():
+                # Phân biệt CPU-only build vs GPU build nhưng không có GPU
+                cuda_built = torch.version.cuda is not None
+                if not cuda_built:
+                    raise RuntimeError(
+                        "PyTorch hiện tại là bản CPU-only, không hỗ trợ CUDA. "
+                        "Cài lại PyTorch có CUDA: https://pytorch.org/get-started/locally/ "
+                        "hoặc chọn mode 'turbo' (CPU) / 'standard' (CPU/GPU tự động)."
+                    )
+                else:
+                    raise RuntimeError(
+                        "Không tìm thấy GPU NVIDIA/CUDA trên máy này. "
+                        "Kiểm tra driver NVIDIA và CUDA toolkit, "
+                        "hoặc chọn mode 'turbo' (CPU) / 'standard' (CPU/GPU tự động)."
+                    )
+            if engine_mode == "xpu":
+                try:
+                    import intel_extension_for_pytorch as ipex  # noqa: F401
+                except ImportError:
+                    raise RuntimeError(
+                        "Chưa cài intel-extension-for-pytorch. "
+                        "Xem hướng dẫn: https://intel.github.io/intel-extension-for-pytorch/ "
+                        "hoặc chọn mode 'turbo' (CPU)."
+                    )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Không thể kiểm tra môi trường GPU: {exc}") from exc
+
+
 def _get_engine(
     engine_mode: str = DEFAULT_ENGINE_MODE,
     backbone_repo: str = DEFAULT_BACKBONE_REPO,
     backbone_device: str = DEFAULT_BACKBONE_DEVICE,
     remote_api_base: str = DEFAULT_REMOTE_API_BASE,
 ):
-    import os
-    if engine_mode == "fast" and os.name == "nt":
-        raise RuntimeError("Backend 'fast' (LMDeploy) hiện tại không hỗ trợ tốt trên Windows do thiếu thư viện Triton/Triton compiler. Vui lòng chọn backend 'turbo_gpu' để tăng tốc độ trên Windows thay vì 'fast'.")
+    _check_mode_requirements(engine_mode)
 
     key = (engine_mode, backbone_repo, backbone_device, remote_api_base)
     if key in _TTS_CACHE:

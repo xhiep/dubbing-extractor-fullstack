@@ -61,7 +61,7 @@ const OutputPanel = () => {
     <div className="card output-panel mt-8">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-headline font-sf-display text-green-800">
+          <h2 className="text-utility font-sf-display text-green-800">
             Xử Lý Hoàn Tất
           </h2>
           <p className="mt-1 text-control text-apple-gray-secondary">
