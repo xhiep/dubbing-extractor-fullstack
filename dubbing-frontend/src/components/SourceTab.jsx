@@ -20,6 +20,11 @@ const SourceTab = () => {
 
   const { data: preview, isLoading, error } = usePreview(showPreview ? sourceInput : null)
 
+  // Sync local state with global state when component remounts
+  useEffect(() => {
+    setSourceInput(processingOptions.source)
+  }, [processingOptions.source])
+
   useEffect(() => {
     if (preview) {
       setPreview(preview)
@@ -34,10 +39,19 @@ const SourceTab = () => {
     }
 
     let cancelled = false
+    let timeoutId = null
 
     const fetchBackendPreview = async () => {
       setBackendPreviewLoading(true)
       setBackendPreviewError('')
+
+      // Set timeout for 30 seconds
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setBackendPreviewLoading(false)
+          setBackendPreviewError('Preview timeout - vui lòng thử lại hoặc kiểm tra URL')
+        }
+      }, 30000)
 
       try {
         const response = await apiClient.post('/preview-render/layout', {
@@ -59,13 +73,16 @@ const SourceTab = () => {
         })
 
         if (!cancelled) {
+          clearTimeout(timeoutId)
           setBackendPreview(response.data)
         }
       } catch (layoutError) {
         if (!cancelled) {
+          clearTimeout(timeoutId)
           console.error('Source backend preview failed:', layoutError)
           setBackendPreview(null)
-          setBackendPreviewError(layoutError.response?.data?.detail || layoutError.message)
+          const errorMsg = layoutError.response?.data?.detail || layoutError.message || 'Không thể tải preview'
+          setBackendPreviewError(errorMsg)
         }
       } finally {
         if (!cancelled) {
@@ -78,6 +95,9 @@ const SourceTab = () => {
 
     return () => {
       cancelled = true
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
   }, [
     showPreview,
