@@ -57,7 +57,7 @@ const AdjustTab = () => {
   const [subtitlePreset, setSubtitlePreset] = useState('default')
   const [previewRenderLoading, setPreviewRenderLoading] = useState(false)
   const [previewRenderUrl, setPreviewRenderUrl] = useState(null)
-  const [previewStartTime, setPreviewStartTime] = useState(1)
+  const [previewStartTime, setPreviewStartTime] = useState(5)
   const [previewDuration, setPreviewDuration] = useState(5)
   const [previewLayout, setPreviewLayout] = useState(null)
   const [previewLayoutLoading, setPreviewLayoutLoading] = useState(false)
