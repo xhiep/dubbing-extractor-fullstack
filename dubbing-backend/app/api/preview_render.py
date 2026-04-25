@@ -84,10 +84,34 @@ def _ensure_preview_source(source: str, start_time: float, duration: float):
         download_range_end=start_time + duration,
     )
 
+    # Trim video to exact start time to compensate for keyframe seeking
+    # yt-dlp seeks to nearest keyframe, which may be before start_time
+    # This ensures the video truly starts at the requested time
     source_ext = Path(video_path).suffix or ".mp4"
+    trimmed_video_path = cache_dir / f"trimmed{source_ext}"
+
+    import subprocess
+    from src.modules.video_processing.ffmpeg_wrapper import ffmpeg_cmd
+
+    ff = ffmpeg_cmd()
+    trim_cmd = [
+        ff, "-y",
+        "-ss", str(start_time),
+        "-i", str(video_path),
+        "-t", str(duration),
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        str(trimmed_video_path),
+    ]
+
+    result = subprocess.run(trim_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.warning(f"Failed to trim video, using original: {result.stderr}")
+        trimmed_video_path = video_path
+
     cached_video_path = cache_dir / f"source{source_ext}"
-    if Path(video_path) != cached_video_path:
-        shutil.copy2(video_path, cached_video_path)
+    if Path(trimmed_video_path) != cached_video_path:
+        shutil.copy2(trimmed_video_path, cached_video_path)
 
     width, height = get_dims(cached_video_path)
     actual_duration = probe_duration(cached_video_path)
